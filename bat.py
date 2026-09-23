@@ -4,6 +4,9 @@ import sys
 import json
 import csv
 import uuid
+import time
+import shutil
+import subprocess
 from datetime import datetime
 
 # Affichage amélioré avec Rich
@@ -94,7 +97,7 @@ class BTP:
             titre.append("\n\nDevelloper: Lariot", style="bold")
             print(Panel(
                 Align.center(titre),
-                title="BTPGPT",
+                title="BTP-Lariot",
                 subtitle="Calcul BTP",
                 box=DOUBLE,
                 expand=True
@@ -6984,7 +6987,7 @@ class BTP:
 
 
 # =============================================================
-# BTPGPT — INTERFACE TKINTER (STYLE BAT.PY)
+# BTP-Lariot — INTERFACE TKINTER (STYLE BAT.PY)
 # Le moteur de calcul BTP au-dessus de cette ligne reste intact.
 # =============================================================
 import tkinter as tk
@@ -7017,7 +7020,7 @@ class BTPtk:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("BTPGPT — Calcul BTP")
+        self.root.title("BTP-Lariot — Calcul BTP")
         self.root.geometry("1280x820")
         self.root.minsize(1000, 640)
         self.root.configure(bg=self.BG)
@@ -7077,7 +7080,7 @@ class BTPtk:
         outer = tk.Frame(self.root, bg=self.BG)
         outer.pack(fill=tk.BOTH, expand=True, padx=24, pady=20)
 
-        tk.Label(outer, text="BTPGPT", font=("Segoe UI", 30, "bold"),
+        tk.Label(outer, text="BTP-Lariot", font=("Segoe UI", 30, "bold"),
                  fg=self.ACCENT, bg=self.BG).pack()
         tk.Label(outer,
                  text="Bâtiment • Travaux Publics — Pré-dimensionnement • Calcul • Quantitatif",
@@ -7137,7 +7140,7 @@ class BTPtk:
 
     def _bind_touch_tree(self, widget, scroll_widget):
         """Autorise le swipe sur les labels/frames du formulaire."""
-        if isinstance(widget, (tk.Entry, tk.Button, ttk.Entry, ttk.Button)):
+        if isinstance(widget, (tk.Entry, tk.Button, ttk.Entry, ttk.Button, ttk.Combobox, tk.Listbox)):
             return
         if widget is not scroll_widget:
             widget.bind("<ButtonPress-1>", lambda e, w=scroll_widget: self._touch_start(w, e), add="+")
@@ -7249,20 +7252,22 @@ class BTPtk:
     def _mapped_value(self, prompt):
         low = prompt.lower()
         o = self.current_option
-        # AUTO : laisse prenons()/ask_float() appliquer son défaut original.
-        if "choisir e (" in low or "choisir h (" in low or "choisir b (" in low:
-            return ""
 
         def val(key, default=None):
             e = self.entries.get(key)
             if e is None:
                 return default
-            raw = e.get().strip()
-            if raw.upper() == "AUTO":
+            try:
+                raw = e.get().strip()
+            except Exception:
+                raw = str(e).strip()
+            if key in getattr(self, "choice_maps", {}):
+                raw = self.choice_maps[key].get(raw, raw)
+            if str(raw).upper() == "AUTO":
                 return ""
-            return raw
+            return raw if raw != "" else (default if default is not None else raw)
 
-        # Option 1
+        # Option 1 — brique
         if o == 1:
             if "longueur de brique l" in low: return val("L")
             if "largeur de brique l" in low: return val("l")
@@ -7270,12 +7275,16 @@ class BTPtk:
             if "voulez-vous calculer le prix" in low: return val("price_yes", "n")
             if "prix d'une unité de brique" in low: return val("pu", "")
 
-        # Option 2
+        # Option 2 — dalle & poutre
         if o == 2:
             if "grande portée ly" in low: return val("Ly")
             if "petite portée lx" in low: return val("Lx")
+            # prenons() demande une valeur vide pour AUTO, ou la valeur manuelle.
+            if "choisir e" in low: return "" if val("e_mode", "auto") == "auto" else val("e")
+            if "choisir h" in low: return "" if val("h_mode", "auto") == "auto" else val("h")
+            if "choisir b" in low: return "" if val("b_mode", "auto") == "auto" else val("b")
 
-        # Option 3
+        # Option 3 — moellon
         if o == 3:
             if "longueur du moellon" in low: return val("L")
             if "largeur du moellon" in low: return val("l")
@@ -7284,7 +7293,7 @@ class BTPtk:
             if "voulez-vous calculer le prix" in low: return val("price_yes", "n")
             if "prix d'une unité de moellon" in low: return val("pu", "")
 
-        # Option 4
+        # Option 4 — poteau
         if o == 4:
             if "votre choix (1, 2 ou 3)" in low: return val("type", "1")
             if "côté du poteau a" in low: return val("a")
@@ -7294,7 +7303,7 @@ class BTPtk:
             if "longueur libre" in low: return val("lo")
             if "effort normal de calcul nu" in low: return val("Nu")
 
-        # Option 5
+        # Option 5 — semelle
         if o == 5:
             if "charge de service nser" in low: return val("Nser")
             if "contrainte admissible du sol" in low: return val("sigma")
@@ -7303,19 +7312,18 @@ class BTPtk:
             if "effort normal de calcul nu" in low: return val("Nu")
             if "votre choix (1 ou 2)" in low: return val("env", "1")
 
-        # Option 6
+        # Option 6 — dalle complète
         if o == 6:
             if "grande portée ly" in low: return val("Ly")
             if "petite portée lx" in low: return val("Lx")
             if "épaisseur de la dalle" in low: return val("h")
             if "épaisseur de l'enduit" in low: return val("ep_enduit")
 
-        # Option 7
+        # Option 7 — escalier
         if o == 7:
             if "hauteur totale h" in low: return val("H")
-            if "choix (1-4)" in low: return val("nb", "2") if int(float(val("nb", "2"))) <= 3 else "4"
-            if "nombre de volées" in low:
-                return val("nb", "2")
+            if "choix (1-4)" in low: return val("nb", "1")
+            if "nombre de volées" in low: return val("nb", "1")
             if "longueur de la volée" in low:
                 idx = self.prompt_counts.get("escalier_long", 0) + 1
                 self.prompt_counts["escalier_long"] = idx
@@ -7325,7 +7333,7 @@ class BTPtk:
                 self.prompt_counts["escalier_height"] = idx
                 return val(f"b{idx}", "1.40")
 
-        # Option 8
+        # Option 8 — fosse
         if o == 8:
             if "nombre d'usagers" in low: return val("N")
             if "largeur intérieure lfos" in low: return val("Lfos")
@@ -7343,8 +7351,8 @@ class BTPtk:
             if "bâtiment masqué" in low: return val("masque", "2")
             if "coefficient de masque" in low: return val("Cm", "1.0")
             if "cr toiture" in low: return val("Cr", "-1.0")
-            if "période t(a)" in low: return val("Ta", "")
-            if "période t(b)" in low: return val("Tb", "")
+            if "période t(a)" in low: return "" if val("Ta_mode", "auto") == "auto" else val("Ta", "")
+            if "période t(b)" in low: return "" if val("Tb_mode", "auto") == "auto" else val("Tb", "")
             if "vitesse de référence" in low: return val("Vref", "65")
 
         # Option 11 — poutre complète
@@ -7353,7 +7361,8 @@ class BTPtk:
             if "portée l" in low:
                 import re
                 m = re.search(r"portée l(\d+)", low)
-                if m: return val(f"L{m.group(1)}", "4.00")
+                if m:
+                    return val(f"L{m.group(1)}", "4.00")
             if "largeur b de la poutre" in low: return val("b", "22.0")
             if "hauteur totale h" in low: return val("h", "50.0")
             if "votre choix (1 ou 2)" in low: return val("charge_mode", "1")
@@ -7409,11 +7418,28 @@ class BTPtk:
     # ---------------------------------------------------------
     # Generic calculation screen — forme de bat.py
     # ---------------------------------------------------------
+    def _choice_code(self, key):
+        widget = self.entries.get(key)
+        if widget is None:
+            return ""
+        try:
+            raw = widget.get().strip()
+        except Exception:
+            raw = str(widget).strip()
+        return self.choice_maps.get(key, {}).get(raw, raw)
+
     def show_calc(self, option, title, groups, schema=False):
+        """Formulaire Tkinter dynamique.
+
+        Les selections utilisent des listes déroulantes et les champs inutiles
+        sont masqués. Les valeurs entrées sont ensuite transmises au moteur BTP
+        original via gui_input(), sans recopier les formules.
+        """
         self.current_option = option
         self.current_title = title
         self.entries = {}
-        self.field_specs = {k: spec for _, fs in groups for spec in fs for k in [spec[0]]}
+        self.field_specs = {}
+        self.choice_maps = {}
         self.prompt_counts = {}
         self.clear_root()
         self.make_header(title, self.show_menu)
@@ -7421,13 +7447,13 @@ class BTPtk:
         main = tk.Frame(self.root, bg=self.BG)
         main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        left = tk.Frame(main, bg=self.BG2, width=390)
+        left = tk.Frame(main, bg=self.BG2, width=400)
         left.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 8))
         left.pack_propagate(False)
         c = tk.Canvas(left, bg=self.BG2, highlightthickness=0)
         sb = ttk.Scrollbar(left, orient="vertical", command=c.yview)
         inner = tk.Frame(c, bg=self.BG2)
-        wid = c.create_window((0,0), window=inner, anchor="nw")
+        wid = c.create_window((0, 0), window=inner, anchor="nw")
         c.configure(yscrollcommand=sb.set)
         c.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         sb.pack(side=tk.RIGHT, fill=tk.Y)
@@ -7436,33 +7462,134 @@ class BTPtk:
 
         def cfg(e=None):
             c.configure(scrollregion=c.bbox("all"))
-            if c.winfo_width() > 1: c.itemconfigure(wid, width=c.winfo_width())
+            if c.winfo_width() > 1:
+                c.itemconfigure(wid, width=c.winfo_width())
         inner.bind("<Configure>", cfg)
         c.bind("<Configure>", cfg)
 
         tk.Label(inner, text="📝 Données d'entrée", font=("Segoe UI", 13, "bold"),
-                 fg=self.YELLOW, bg=self.BG2).pack(anchor="w", padx=14, pady=(14,6))
+                 fg=self.YELLOW, bg=self.BG2).pack(anchor="w", padx=14, pady=(14, 6))
 
-        for gtitle, fields in groups:
-            if gtitle:
-                tk.Label(inner, text=gtitle, font=("Segoe UI",10,"bold"),
-                         fg=self.ACCENT, bg=self.BG2).pack(anchor="w", padx=14, pady=(10,4))
-            for spec in fields:
+        row_records = []
+        condition_callbacks = []
+
+        def normalize_spec(spec):
+            # Ancien format tuple: (key, label, default)
+            if not isinstance(spec, dict):
                 key, label, default = spec[:3]
-                row = tk.Frame(inner, bg=self.BG2)
-                row.pack(fill=tk.X, padx=14, pady=3)
-                tk.Label(row, text=label, font=("Segoe UI",9), fg=self.FG,
-                         bg=self.BG2, anchor="w", width=23, justify="left").pack(side=tk.LEFT)
-                e = tk.Entry(row, font=("Consolas",10), bg=self.BTN, fg=self.FG,
+                return {"key": key, "label": label, "default": default, "kind": "entry"}
+            d = dict(spec)
+            d.setdefault("kind", "entry")
+            d.setdefault("default", "")
+            return d
+
+        def get_choice_code(key):
+            widget = self.entries.get(key)
+            if widget is None:
+                return ""
+            raw = widget.get().strip()
+            return self.choice_maps.get(key, {}).get(raw, raw)
+
+        def field_value(key):
+            widget = self.entries.get(key)
+            if widget is None:
+                return ""
+            return widget.get().strip()
+
+        def evaluate_condition(cond):
+            if cond is None:
+                return True
+            if callable(cond):
+                try:
+                    return bool(cond())
+                except Exception:
+                    return False
+            if isinstance(cond, tuple) and len(cond) == 2:
+                key, expected = cond
+                value = get_choice_code(key)
+                if isinstance(expected, (set, list, tuple)):
+                    return value in {str(x) for x in expected}
+                return value == str(expected)
+            return True
+
+        def render_spec(group_frame, spec):
+            spec = normalize_spec(spec)
+            key = spec["key"]
+            self.field_specs[key] = spec
+            row = tk.Frame(group_frame, bg=self.BG2)
+            row.pack(fill=tk.X, padx=14, pady=3)
+            row_records.append((row, spec))
+
+            label = tk.Label(row, text=spec["label"], font=("Segoe UI", 9),
+                             fg=self.FG, bg=self.BG2, anchor="w", width=24, justify="left")
+            label.pack(side=tk.LEFT)
+
+            kind = spec.get("kind", "entry")
+            if kind == "choice":
+                options = spec.get("options", [])
+                labels = [x[1] if isinstance(x, tuple) else str(x) for x in options]
+                codes = {x[1]: str(x[0]) for x in options if isinstance(x, tuple)}
+                self.choice_maps[key] = codes
+                cb = ttk.Combobox(row, values=labels, state="readonly", width=19)
+                default_code = str(spec.get("default", ""))
+                default_label = next((x[1] for x in options if isinstance(x, tuple) and str(x[0]) == default_code), None)
+                if default_label is None and labels:
+                    default_label = labels[0]
+                if default_label is not None:
+                    cb.set(default_label)
+                cb.pack(side=tk.RIGHT, ipady=2)
+                self.entries[key] = cb
+                if spec.get("command"):
+                    cb.bind("<<ComboboxSelected>>", lambda e, f=spec["command"]: f(), add="+")
+            elif kind == "info":
+                value = tk.Label(row, text=str(spec.get("default", "")),
+                                 font=("Consolas", 9), fg=self.MUTED, bg=self.BG2,
+                                 anchor="w", justify="left", wraplength=170)
+                value.pack(side=tk.RIGHT, fill=tk.X, expand=True)
+                self.entries[key] = value
+            else:
+                e = tk.Entry(row, font=("Consolas", 10), bg=self.BTN, fg=self.FG,
                              insertbackground=self.ACCENT, relief=tk.FLAT, width=14)
-                e.insert(0, str(default))
+                e.insert(0, str(spec.get("default", "")))
                 e.pack(side=tk.RIGHT, ipady=4)
                 self.entries[key] = e
+
+            return row
+
+        # Build groups and collect rows. All selection-dependent rows can then
+        # be hidden/shown without deleting any value from the form state.
+        for gtitle, fields in groups:
+            if gtitle:
+                tk.Label(inner, text=gtitle, font=("Segoe UI", 10, "bold"),
+                         fg=self.ACCENT, bg=self.BG2).pack(anchor="w", padx=14, pady=(10,4))
+            for spec in fields:
+                render_spec(inner, spec)
+
+        def refresh_visibility(*_):
+            for row, spec in row_records:
+                visible = evaluate_condition(spec.get("visible_if"))
+                if visible:
+                    row.pack(fill=tk.X, padx=14, pady=3)
+                else:
+                    row.pack_forget()
+            inner.update_idletasks()
+            cfg()
+
+        # Wire dynamic visibility after every widget exists.
+        for key, spec in self.field_specs.items():
+            cmd = spec.get("refresh_on_change")
+            if cmd and key in self.entries:
+                try:
+                    self.entries[key].bind("<<ComboboxSelected>>", lambda e: refresh_visibility(), add="+")
+                except Exception:
+                    pass
+        refresh_visibility()
 
         info = tk.LabelFrame(inner, text=" ℹ️ ", bg=self.BG2, fg=self.MUTED,
                              bd=0, labelanchor="nw")
         info.pack(fill=tk.X, padx=14, pady=(10,4))
-        tk.Label(info, text="Les valeurs affichées sont modifiables.\nLe calcul utilise directement le moteur BTP original.",
+        tk.Label(info,
+                 text="Les valeurs affichées sont modifiables.\nLes choix inutiles sont masqués automatiquement.\nLe calcul utilise directement le moteur BTP original.",
                  bg=self.BG2, fg=self.MUTED, justify="left", font=("Segoe UI",8)).pack(anchor="w", padx=8, pady=6)
 
         bf = tk.Frame(inner, bg=self.BG2)
@@ -7493,7 +7620,6 @@ class BTPtk:
         self.active_output = result
 
         if schema:
-            # Schéma optionnel permanent sous le résultat.
             sf = tk.LabelFrame(right, text=" 📐 Schéma ", font=("Segoe UI",10,"bold"),
                                fg=self.ACCENT, bg=self.BG2, bd=0, labelanchor="nw")
             sf.pack(fill=tk.X, pady=(8,0))
@@ -7507,19 +7633,16 @@ class BTPtk:
 
     def _preflight_defaults(self):
         # Validation légère avant d'entrer dans le moteur original.
-        # Ne modifie aucune formule.
         for key, spec in self.field_specs.items():
-            default = spec[2]
-            if len(spec) >= 4 and spec[3] == "text":
+            if not isinstance(spec, dict):
+                continue
+            if spec.get("kind") in ("choice", "info"):
                 continue
             raw = self.entries[key].get().strip().replace(",", ".")
             if raw in ("", "AUTO"):
                 continue
-            try:
-                float(raw)
-            except ValueError:
-                if key not in ("type", "price_yes", "env", "charge_mode", "Q_choice", "zone", "site", "masque"):
-                    pass
+            # Les entrées texte restent libres; la validation numérique stricte
+            # est faite par le moteur BTP original.
 
     def run_current(self):
         if self.running:
@@ -7580,54 +7703,228 @@ class BTPtk:
     # Form screens (defaults inspirés de bat.py, calcul original)
     # ---------------------------------------------------------
     def open_option(self, n):
+        """Construit les formulaires GUI avec sélections conditionnelles.
+
+        Les codes envoyés au moteur restent exactement ceux attendus par btp.py.
+        La sélection utilisateur affiche des libellés compréhensibles au lieu de
+        « choix 1/2/3 ».
+        """
+        choice = lambda key, label, default, options, **kw: {"key": key, "label": label,
+            "default": default, "kind": "choice", "options": options, **kw}
+        entry = lambda key, label, default, **kw: {"key": key, "label": label,
+            "default": default, "kind": "entry", **kw}
+
         if n == 1:
-            return self.show_calc(1,"Calcul de brique",[
-                ("Dimensions",[("L","Longueur brique L (m)","0.22"),("l","Largeur brique l (m)","0.11"),("T","Surface totale du mur T (m²)","20")]),
-                ("Prix (optionnel)",[("price_yes","Calculer le prix ? (o/n)","n"),("pu","Prix unitaire / brique (Ar)","")])])
+            def price_refresh(): pass
+            return self.show_calc(1, "Calcul de brique", [
+                ("Dimensions", [
+                    entry("L", "Longueur brique L (m)", "0.22"),
+                    entry("l", "Largeur brique l (m)", "0.11"),
+                    entry("T", "Surface totale du mur T (m²)", "20"),
+                ]),
+                ("Prix (optionnel)", [
+                    choice("price_yes", "Calculer le prix ?", "n",
+                           [("o", "Oui"), ("n", "Non")], refresh_on_change=True),
+                    entry("pu", "Prix unitaire / brique (Ar)", "",
+                          visible_if=lambda: self._choice_code("price_yes") == "o"),
+                ])
+            ])
+
         if n == 2:
-            return self.show_calc(2,"Calcul H/e dalle & poutre",[
-                ("Portées",[("Ly","Longueur grande portée Ly (m)","4.50"),("Lx","Longueur petite portée Lx (m)","4.00")]),
-                ("Dimensionnement automatique",[("e","Épaisseur e : AUTO","AUTO"),("h","Hauteur h : AUTO","AUTO"),("b","Base b : AUTO","AUTO")])])
+            auto_manual = [("auto", "Automatique (moyenne)"), ("manual", "Saisie manuelle")]
+            return self.show_calc(2, "Calcul H/e dalle & poutre", [
+                ("Portées", [
+                    entry("Ly", "Grande portée Ly (m)", "4.50"),
+                    entry("Lx", "Petite portée Lx (m)", "4.00"),
+                ]),
+                ("Dimensionnement de e", [
+                    choice("e_mode", "Épaisseur e", "auto", auto_manual, refresh_on_change=True),
+                    entry("e", "Valeur e manuelle (m)", "0.12",
+                          visible_if=lambda: self._choice_code("e_mode") == "manual"),
+                ]),
+                ("Dimensionnement de h", [
+                    choice("h_mode", "Hauteur h", "auto", auto_manual, refresh_on_change=True),
+                    entry("h", "Valeur h manuelle (m)", "0.30",
+                          visible_if=lambda: self._choice_code("h_mode") == "manual"),
+                ]),
+                ("Dimensionnement de b", [
+                    choice("b_mode", "Base b", "auto", auto_manual, refresh_on_change=True),
+                    entry("b", "Valeur b manuelle (m)", "0.20",
+                          visible_if=lambda: self._choice_code("b_mode") == "manual"),
+                ]),
+            ])
+
         if n == 3:
-            return self.show_calc(3,"Calcul de moellon",[
-                ("Dimensions",[("L","Longueur moellon L (m)","0.40"),("l","Largeur moellon l (m)","0.20"),("e","Épaisseur moellon e (m)","0.20"),("T","Volume total du mur T (m³)","10")]),
-                ("Prix (optionnel)",[("price_yes","Calculer le prix ? (o/n)","n"),("pu","Prix unitaire / moellon (Ar)","")])])
+            return self.show_calc(3, "Calcul de moellon", [
+                ("Dimensions", [
+                    entry("L", "Longueur moellon L (m)", "0.40"),
+                    entry("l", "Largeur moellon l (m)", "0.20"),
+                    entry("e", "Épaisseur moellon e (m)", "0.20"),
+                    entry("T", "Volume total du mur T (m³)", "10"),
+                ]),
+                ("Prix (optionnel)", [
+                    choice("price_yes", "Calculer le prix ?", "n", [("o", "Oui"), ("n", "Non")], refresh_on_change=True),
+                    entry("pu", "Prix unitaire / moellon (Ar)", "",
+                          visible_if=lambda: self._choice_code("price_yes") == "o"),
+                ])
+            ])
+
         if n == 4:
-            return self.show_calc(4,"Calcul complet du poteau (BAEL)",[
-                ("Type",[("type","Type (1=carré, 2=rect., 3=rond)","1")]),
-                ("Géométrie",[("a","Côté / largeur a (m)","0.30"),("b","Longueur b (m)","0.30"),("D","Diamètre D (m)","0.30"),("lo","Longueur libre l₀ (m)","3.00")]),
-                ("Charge",[("Nu","Effort normal Nu (MN)","0.80")])], schema=True)
+            return self.show_calc(4, "Calcul complet du poteau (BAEL)", [
+                ("Type de poteau", [
+                    choice("type", "Type de section", "1",
+                           [("1", "Carré"), ("2", "Rectangulaire"), ("3", "Rond / circulaire")],
+                           refresh_on_change=True),
+                ]),
+                ("Géométrie", [
+                    entry("a", "Côté a (m)", "0.30",
+                          visible_if=lambda: self._choice_code("type") in ("1", "2")),
+                    entry("b", "Longueur b (m)", "0.30",
+                          visible_if=lambda: self._choice_code("type") == "2"),
+                    entry("D", "Diamètre D (m)", "0.30",
+                          visible_if=lambda: self._choice_code("type") == "3"),
+                    entry("lo", "Longueur libre l₀ (m)", "3.00"),
+                ]),
+                ("Charge", [entry("Nu", "Effort normal Nu (MN)", "0.80")])
+            ], schema=True)
+
         if n == 5:
-            return self.show_calc(5,"Semelle isolée (DTU 13.12)",[
-                ("Charges",[("Nser","Charge de service Nser (kN)","800"),("Nu","Effort normal Nu (MN)","1.20")]),
-                ("Sol et poteau",[("sigma","Contrainte sol σsol (MPa)","0.20"),("a","Largeur poteau a (m)","0.30"),("b","Longueur poteau b (m)","0.30"),("env","Enrobage (1=3cm, 2=5cm)","1")])], schema=True)
+            return self.show_calc(5, "Semelle isolée (DTU 13.12)", [
+                ("Charges", [
+                    entry("Nser", "Charge de service Nser (kN)", "800"),
+                    entry("Nu", "Effort normal Nu (MN)", "1.20"),
+                ]),
+                ("Sol et poteau", [
+                    entry("sigma", "Contrainte du sol σsol (MPa)", "0.20"),
+                    entry("a", "Largeur poteau a (m)", "0.30"),
+                    entry("b", "Longueur poteau b (m)", "0.30"),
+                    choice("env", "Enrobage nominal", "1",
+                           [("1", "3 cm"), ("2", "5 cm")]),
+                ])
+            ], schema=True)
+
         if n == 6:
-            return self.show_calc(6,"Calcul complet de la dalle",[
-                ("Géométrie",[("Ly","Grande portée Ly (m)","5.00"),("Lx","Petite portée Lx (m)","4.00"),("h","Épaisseur dalle h (m)","0.15")]),
-                ("Charges fixes du moteur",[("ep_enduit","Épaisseur enduit (m)","0.020")])], schema=True)
+            return self.show_calc(6, "Calcul complet de la dalle", [
+                ("Géométrie", [
+                    entry("Ly", "Grande portée Ly (m)", "5.00"),
+                    entry("Lx", "Petite portée Lx (m)", "4.00"),
+                    entry("h", "Épaisseur de la dalle h (m)", "0.15"),
+                ]),
+                ("Charge permanente", [
+                    entry("ep_enduit", "Épaisseur de l'enduit (m)", "0.020"),
+                ])
+            ], schema=True)
+
         if n == 7:
-            return self.show_calc(7,"Calcul complet de l'escalier",[
-                ("Données générales",[("H","Hauteur totale H (m)","2.80"),("nb","Nombre de volées (1-4)","2")]),
-                ("Volée 1",[("a1","Longueur (m)","2.50"),("b1","Hauteur (m)","1.40")]),
-                ("Volée 2",[("a2","Longueur (m)","2.50"),("b2","Hauteur (m)","1.40")]),
-                ("Volée 3",[("a3","Longueur (m)","2.50"),("b3","Hauteur (m)","1.40")]),
-                ("Volée 4",[("a4","Longueur (m)","2.50"),("b4","Hauteur (m)","1.40")])], schema=True)
+            groups = [
+                ("Données générales", [
+                    entry("H", "Hauteur totale H (m)", "2.80"),
+                    choice("nb", "Nombre de volées", "2",
+                           [("1", "1 volée"), ("2", "2 volées"), ("3", "3 volées"), ("4", "4 volées")],
+                           refresh_on_change=True),
+                ])
+            ]
+            for i in range(1, 5):
+                groups.append((f"Volée {i}", [
+                    entry(f"a{i}", "Longueur (m)", "2.50",
+                          visible_if=lambda i=i: int(float(self._choice_code("nb") or "1")) >= i),
+                    entry(f"b{i}", "Hauteur (m)", "1.40",
+                          visible_if=lambda i=i: int(float(self._choice_code("nb") or "1")) >= i),
+                ]))
+            return self.show_calc(7, "Calcul complet de l'escalier", groups, schema=True)
+
         if n == 8:
-            return self.show_calc(8,"Calcul de la fosse septique",[
-                ("Dimensions / capacité",[("N","Nombre d'usagers (personnes)","8"),("Lfos","Largeur intérieure Lfos (m)","1.20"),("He","Profondeur d'eau He (m)","1.50")])])
+            return self.show_calc(8, "Calcul de la fosse septique", [
+                ("Dimensions / capacité", [
+                    entry("N", "Nombre d'usagers (personnes)", "8"),
+                    entry("Lfos", "Largeur intérieure Lfos (m)", "1.20"),
+                    entry("He", "Profondeur d'eau He (m)", "1.50"),
+                ])
+            ])
+
         if n == 9:
             return self.show_avant_metre_gui()
+
         if n == 10:
-            return self.show_calc(10,"Calcul complet de l'effet du vent",[
-                ("Géométrie",[("a","Largeur façade a (m)","11.00"),("b","Largeur façade b (m)","9.00"),("H","Hauteur totale H (m)","15.40")]),
-                ("Zone q10",[("zone","Zone (1=Hauts Plateaux, 2=Côte, 3=Perso)","1"),("q10n","q10 normal (kgf/m²)","50"),("q10e","q10 extrême (kgf/m²)","87.5")]),
-                ("Site / masque",[("site","Site (1=protégé, 2=normal, 3=exposé)","2"),("masque","Bâtiment masqué ? (1=oui, 2=non)","2"),("Cm","Cm si masqué","1.00")]),
-                ("Toiture / Kármán",[("Cr","Cr toiture (signé)","-1.00"),("Ta","Période T(a) : AUTO","AUTO"),("Tb","Période T(b) : AUTO","AUTO"),("Vref","Vitesse Vref (m/s)","65")])])
+            return self.show_calc(10, "Calcul complet de l'effet du vent", [
+                ("Géométrie", [
+                    entry("a", "Largeur façade a (m)", "11.00"),
+                    entry("b", "Largeur façade b (m)", "9.00"),
+                    entry("H", "Hauteur totale H (m)", "15.40"),
+                ]),
+                ("Zone q10", [
+                    choice("zone", "Zone de vent", "1",
+                           [("1", "Hauts Plateaux"), ("2", "Côte"), ("3", "Valeurs personnalisées")],
+                           refresh_on_change=True),
+                    entry("q10n", "q10 normal (kgf/m²)", "50",
+                          visible_if=lambda: self._choice_code("zone") == "3"),
+                    entry("q10e", "q10 extrême (kgf/m²)", "87.5",
+                          visible_if=lambda: self._choice_code("zone") == "3"),
+                ]),
+                ("Site / masque", [
+                    choice("site", "Exposition du site", "2",
+                           [("1", "Protégé"), ("2", "Normal"), ("3", "Exposé")]),
+                    choice("masque", "Bâtiment masqué ?", "2",
+                           [("1", "Oui"), ("2", "Non")], refresh_on_change=True),
+                    entry("Cm", "Coefficient de masque Cm", "1.00",
+                          visible_if=lambda: self._choice_code("masque") == "1"),
+                ]),
+                ("Toiture / Kármán", [
+                    entry("Cr", "Cr toiture (valeur signée)", "-1.00"),
+                    choice("Ta_mode", "Période T(a)", "auto",
+                           [("auto", "Automatique"), ("manual", "Saisie manuelle")], refresh_on_change=True),
+                    entry("Ta", "Valeur T(a) manuelle (s)", "0.50",
+                          visible_if=lambda: self._choice_code("Ta_mode") == "manual"),
+                    choice("Tb_mode", "Période T(b)", "auto",
+                           [("auto", "Automatique"), ("manual", "Saisie manuelle")], refresh_on_change=True),
+                    entry("Tb", "Valeur T(b) manuelle (s)", "0.50",
+                          visible_if=lambda: self._choice_code("Tb_mode") == "manual"),
+                    entry("Vref", "Vitesse de référence V (m/s)", "65"),
+                ])
+            ])
+
         if n == 11:
-            return self.show_calc(11,"Calcul complet de la poutre (BAEL 91)",[
-                ("Géométrie",[("nb","Nombre de travées","1")]+[(f"L{i}",f"Portée L{i} (m)","5.20" if i==1 else "4.00") for i in range(1,7)]+[("b","Largeur b (cm)","22.0"),("h","Hauteur h (cm)","50.0")]),
-                ("Charges",[("charge_mode","Mode G (1=total, 2=détaillé)","1"),("G","G surfacique (kN/m²)","5.00"),("e_dalle","Épaisseur dalle (m)","0.16"),("G_revetement","Revêtement (kN/m²)","0.60"),("G_cloisons","Cloisons (kN/m²)","0.40"),("G_enduit","Enduit (kN/m²)","0.44"),("Q_choice","Q (1=hab., 2=bureau, 3=esc., 4=terr., 5=man.)","1"),("Q_manual","Q manuel (kN/m²)","1.50")]),
-                ("Dalle supportée",[("Lx_dalle","Petite portée Lx dalle (m)","4.00"),("Ly_dalle","Grande portée Ly dalle (m)","4.25")])], schema=True)
+            groups = [
+                ("Géométrie", [
+                    choice("nb", "Nombre de travées", "1",
+                           [(str(i), f"{i} travée" if i == 1 else f"{i} travées") for i in range(1, 7)],
+                           refresh_on_change=True),
+                ]),
+            ]
+            for i in range(1, 7):
+                groups[0][1].append(entry(
+                    f"L{i}", f"Portée L{i} (m)", "5.20" if i == 1 else "4.00",
+                    visible_if=lambda i=i: int(float(self._choice_code("nb") or "1")) >= i
+                ))
+            groups[0][1].extend([
+                entry("b", "Largeur b de la poutre (cm)", "22.0"),
+                entry("h", "Hauteur totale h (cm)", "50.0"),
+            ])
+            groups.append(("Charges", [
+                choice("charge_mode", "Mode des charges G", "1",
+                       [("1", "G total direct"), ("2", "G détaillé")], refresh_on_change=True),
+                entry("G", "G surfacique (kN/m²)", "5.00",
+                      visible_if=lambda: self._choice_code("charge_mode") == "1"),
+                entry("e_dalle", "Épaisseur dalle (m)", "0.16",
+                      visible_if=lambda: self._choice_code("charge_mode") == "2"),
+                entry("G_revetement", "Revêtement (kN/m²)", "0.60",
+                      visible_if=lambda: self._choice_code("charge_mode") == "2"),
+                entry("G_cloisons", "Cloisons (kN/m²)", "0.40",
+                      visible_if=lambda: self._choice_code("charge_mode") == "2"),
+                entry("G_enduit", "Enduit (kN/m²)", "0.44",
+                      visible_if=lambda: self._choice_code("charge_mode") == "2"),
+                choice("Q_choice", "Surcharge Q", "1",
+                       [("1", "Habitation"), ("2", "Bureau"), ("3", "Escalier / circulation"),
+                        ("4", "Terrasse"), ("5", "Valeur manuelle")], refresh_on_change=True),
+                entry("Q_manual", "Surcharge Q manuelle (kN/m²)", "1.50",
+                      visible_if=lambda: self._choice_code("Q_choice") == "5"),
+            ]))
+            groups.append(("Dalle supportée", [
+                entry("Lx_dalle", "Petite portée Lx dalle (m)", "4.00"),
+                entry("Ly_dalle", "Grande portée Ly dalle (m)", "4.25"),
+            ]))
+            return self.show_calc(11, "Calcul complet de la poutre (BAEL 91)", groups, schema=True)
+
         if n == 12:
             return self.show_descente_charge_gui()
 
@@ -8527,10 +8824,98 @@ class BTPtk:
         c.create_text(W/2,H-18,text=f"{n}HA{d:g}  •  Ø{d:g} mm",fill=self.GREEN,font=("Segoe UI",10,"bold"))
 
 
+
+def get_pid_command_psaux():
+  try:
+    output = subprocess.check_output(
+      ["ps", "aux"],
+      stderr=subprocess.DEVNULL,
+      text=True
+    )
+    lines = output.strip().split("\n")
+    result = []
+    for line in lines[1:]:
+      if not line.strip():
+        continue
+      parts = line.split(None, 10)
+      if len(parts) >= 11:
+        pid = parts[1]
+        command = parts[10]
+        result.append(
+          (
+            pid,
+            command
+          )
+        )
+    return result
+  except Exception:
+    return []
+
+def x11_running():
+  processes = (get_pid_command_psaux())
+  for pid, cmd in processes:
+    cmd = cmd.lower()
+    if (
+      "termux-x11" in cmd
+      or
+      "com.termux.x11" in cmd
+    ):
+      return True
+  return False
+
+def redirect_x11():
+  try:
+    subprocess.run(
+      [
+        "am", "start",
+        "-n", "com.termux.x11/com.termux.x11.MainActivity"
+      ],
+      stdout=subprocess.DEVNULL,
+      stderr=subprocess.DEVNULL,
+    )
+  except Exception:
+    pass
+
+def is_terminal():
+  if os.path.exists("/data/data/com.termux"):
+    os.environ["DISPLAY"] = ":0"
+    if x11_running():
+      redirect_x11()
+      return True
+    termux_x11 = shutil.which("termux-x11")
+    if not termux_x11:
+      raise RuntimeError(
+        "\nAucun termux-x11 sur votre Android.\n"
+        "Veuillez installer Termux:X11."
+      )
+    try:
+      subprocess.Popen(
+        [
+          termux_x11,
+          ":0"
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True
+      )
+      for _ in range(20):
+        time.sleep(5)
+        if x11_running():
+          redirect_x11()
+          return True
+      redirect_x11()
+      return True
+    except Exception as e:
+      raise RuntimeError(
+        "\nImpossible de démarrer Termux:X11.\n"
+        f"{e}"
+      )
+  return True
 # =============================================================
 # MAIN — aucun menu terminal
 # =============================================================
 if __name__ == "__main__":
+    is_terminal()
     root = tk.Tk()
     app = BTPtk(root)
     root.mainloop()
