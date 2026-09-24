@@ -1,3 +1,13 @@
+# -*- coding: utf-8 -*-
+"""
+BTPGPT — VERSION HYBRIDE VALIDÉE
+
+Moteur de calcul : BTP.py original (classe BTP conservée exactement).
+Interface graphique : BAT.py (style Tkinter), avec correction des
+choix dynamiques et des modes AUTO/MANUEL.
+
+Aucune formule de la classe BTP n'est réécrite ici.
+"""
 import math
 import os
 import sys
@@ -97,7 +107,7 @@ class BTP:
             titre.append("\n\nDevelloper: Lariot", style="bold")
             print(Panel(
                 Align.center(titre),
-                title="BTP-Lariot",
+                title="BTPGPT",
                 subtitle="Calcul BTP",
                 box=DOUBLE,
                 expand=True
@@ -6986,6 +6996,7 @@ class BTP:
 
 
 
+
 # =============================================================
 # BTP-Lariot — INTERFACE TKINTER (STYLE BAT.PY)
 # Le moteur de calcul BTP au-dessus de cette ligne reste intact.
@@ -7020,7 +7031,7 @@ class BTPtk:
 
     def __init__(self, root):
         self.root = root
-        self.root.title("BTP-Lariot — Calcul BTP")
+        self.root.title("BTPGPT — Calcul BTP")
         self.root.geometry("1280x820")
         self.root.minsize(1000, 640)
         self.root.configure(bg=self.BG)
@@ -7261,8 +7272,12 @@ class BTPtk:
                 raw = e.get().strip()
             except Exception:
                 raw = str(e).strip()
+            # Les valeurs des Combobox doivent rester leurs codes internes
+            # ("auto", "manual", "1", "2", ...). Ne pas convertir
+            # "auto" en chaîne vide ici : cela cassait les choix
+            # conditionnels, notamment e/h/b de l'option 2.
             if key in getattr(self, "choice_maps", {}):
-                raw = self.choice_maps[key].get(raw, raw)
+                return self.choice_maps[key].get(raw, raw)
             if str(raw).upper() == "AUTO":
                 return ""
             return raw if raw != "" else (default if default is not None else raw)
