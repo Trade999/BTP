@@ -767,9 +767,16 @@ class BTP:
     
             pp_dalle = h * gamma_beton
             enduit = ep_enduit * gamma_enduit
-            Pu = pp_dalle + charge_carreaux + enduit
-            Pu_MN_m2 = Pu / 1000.0
+            G_surfacique = pp_dalle + charge_carreaux + enduit
             Q_surfacique = charge_exploitation
+
+            # Combinaisons réglementaires BAEL 91 révisé 99.
+            # Les moments de dimensionnement sont calculés à l'ELU;
+            # la combinaison de service est conservée pour l'affichage.
+            Pu = 1.35 * G_surfacique + 1.50 * Q_surfacique
+            Pser = G_surfacique + Q_surfacique
+            Pu_MN_m2 = Pu / 1000.0
+            Pser_MN_m2 = Pser / 1000.0
     
             # =================================================
             # 3 - MOMENTS (SELON LE SENS DE PORTÉE)
@@ -824,9 +831,10 @@ class BTP:
     
             if terme_racine < 0:
                 print()
-                print("⚠️ 1 − 2·Mlu < 0 : section doublement armée nécessaire.")
-                alpha_zb = None
-                Zb = None
+                print("❌ 1 − 2·Mlu < 0 : section doublement armée nécessaire.")
+                print("   Le calcul BAEL de cette dalle est arrêté : augmenter h ou revoir les charges.")
+                self.pause()
+                continue
             else:
                 alpha_zb = 1.25 * (1.0 - math.sqrt(terme_racine))
                 Zb = d * (1.0 - 0.4 * alpha_zb)
@@ -917,8 +925,9 @@ class BTP:
             # 8 - VÉRIFICATION DE L'EFFORT TRANCHANT (A.5.2)
             # =================================================
     
-            tau_u_x = Vx * 1000.0 / (b_cm * d_cm) if Vx > 0 else 0.0
-            tau_u_y = Vy * 1000.0 / (b_cm * d_cm) if Vy > 0 else 0.0
+            # V est en MN et la section en cm² : 1 MN = 10 000 MPa·cm².
+            tau_u_x = Vx * 10000.0 / (b_cm * d_cm) if Vx > 0 else 0.0
+            tau_u_y = Vy * 10000.0 / (b_cm * d_cm) if Vy > 0 else 0.0
             tau_u_max = max(tau_u_x, tau_u_y)
     
             # τu,lim pour dalle (fissuration peu préjudiciable)
@@ -985,11 +994,14 @@ class BTP:
             print("Enduit :")
             print(f"Enduit = {ep_enduit:.3f} × {gamma_enduit:.2f} = {enduit:.3f} kN/m²")
             print()
-            print("Charge permanente surfacique Pu :")
-            print(f"Pu = {pp_dalle:.3f} + {charge_carreaux:.3f} + {enduit:.3f}")
-            print(f"Pu = {Pu:.3f} kN/m² = {Pu_MN_m2:.6f} MN/m²")
+            print("Charges surfaciques :")
+            print(f"G = {pp_dalle:.3f} + {charge_carreaux:.3f} + {enduit:.3f}")
+            print(f"G = {G_surfacique:.3f} kN/m²")
+            print(f"Q = {Q_surfacique:.3f} kN/m²")
+            print(f"Pu = 1.35G + 1.50Q = {Pu:.3f} kN/m² = {Pu_MN_m2:.6f} MN/m²")
+            print(f"Pser = G + Q = {Pser:.3f} kN/m² = {Pser_MN_m2:.6f} MN/m²")
             print()
-            print(f"Charge d'exploitation Q = {Q_surfacique:.3f} kN/m²")
+            print("Combinaisons BAEL : ELU pour le ferraillage, ELS pour les vérifications de service")
     
             # -------------------------------------------------
             # 3 - MOMENTS
@@ -1534,8 +1546,11 @@ class BTP:
                 alpha = 0.6 * (50.0 / lambda_meca) ** 2
                 domaine = "compression centrée (50 < λ ≤ 70)"
             else:
-                alpha = 0.6 * (50.0 / 70.0) ** 2
-                domaine = "⚠️ λ > 70 : hors domaine BAEL simplifié"
+                print()
+                print("❌ λ > 70 : hors domaine de la méthode BAEL simplifiée.")
+                print("   Le dimensionnement du poteau est arrêté : vérifier le système de contreventement ou augmenter la section.")
+                self.pause()
+                continue
     
             # =================================================
             # 8 - ARMATURE LONGITUDINALE (BAEL B.8.4.1)
@@ -1638,7 +1653,9 @@ class BTP:
             # 12 - ESPACEMENT DES CADRES (BAEL A.8.1.2.1)
             # =================================================
             # Zone courante : st ≤ min(15φl ; 40 cm ; a+10 cm)
-            # Zone nodale : st' ≤ min(10φl ; 15 cm)  [RPA 99 / BAEL]
+            # Zone nodale : st' ≤ min(10φl ; 15 cm)  [RPA 99]
+            # Cette exigence est sismique et ne doit pas être présentée
+            # comme une règle BAEL générale.
     
             if type_poteau == "rond":
                 petit_cote = D
@@ -2770,7 +2787,8 @@ class BTP:
                     V_g = abs(el["V0"] + (el["M_appui_droit"] - el["M_appui_gauche"]) / el["L"])
                     V_d = abs(el["V0"] - (el["M_appui_droit"] - el["M_appui_gauche"]) / el["L"])
                     V_max = max(V_g, V_d)
-                tau_u = V_max * 1000.0 / (100.0 * e * 100.0)
+                # V est en MN et b·d en cm² : conversion MN/cm² → MPa.
+                tau_u = V_max * 10000.0 / (100.0 * e * 100.0)
                 el["V_max"] = V_max
                 el["tau_u"] = tau_u
                 el["tau_ok"] = tau_u <= tau_lim
@@ -2800,7 +2818,9 @@ class BTP:
             # =====================================================
             # 9 - FLÈCHE
             # =====================================================
-            section_panel("8", "VÉRIFICATION DE LA FLÈCHE (BAEL 91 B.6.5)")
+            section_panel("8", "ESTIMATION DE LA FLÈCHE — MODÈLE SIMPLIFIÉ")
+            print("⚠️ Estimation limitée : modèle de volée simplement appuyée et limite L/500.")
+            print("   Ce résultat ne remplace pas le calcul complet BAEL A.4.6/B.6.5 avec phases, fluage et retrait.")
     
             E_i = 11000.0 * (Fc28 ** (1.0 / 3.0))
             n_eq = 15.0
@@ -2826,7 +2846,10 @@ class BTP:
                 if el["travée"] and el["travée"]["choix"]:
                     As_f = el["travée"]["choix"][0]
                 else:
-                    As_f = 1.0
+                    # Pas de valeur fictive : une flèche non calculable
+                    # doit rester signalée comme telle.
+                    el["f_tot"] = None
+                    continue
     
                 A_eq = b_cm / 2.0
                 B_eq = n_eq * As_f
@@ -2847,6 +2870,9 @@ class BTP:
                 f_i_mm = (5.0 * M_ser_Nm * el["L"] ** 2) / (48.0 * E_i_Pa * I_f_m4) * 1000.0
                 f_v_mm = f_i_mm * 0.5
                 f_tot = f_i_mm + f_v_mm
+                # Limite de projet conventionnelle, à confirmer par le CCTP;
+                # le BAEL ne fixe pas une valeur universelle L/500 pour tous
+                # les éléments et toutes les conditions d'utilisation.
                 f_adm = (el["L"] * 1000.0) / 500.0
     
                 el["f_tot"] = f_tot
@@ -2887,8 +2913,8 @@ class BTP:
                     f"f_tot = {f_tot:.3f} mm"
                 )
                 formula_panel(
-                    "Flèche admissible",
-                    "f_adm = L / 500",
+                    "Limite conventionnelle de projet",
+                    "f_adm = L / 500 (à confirmer par le CCTP)",
                     f"f_adm = {el['L']*1000:.0f} / 500",
                     f"f_adm = {f_adm:.3f} mm"
                 )
@@ -2915,7 +2941,9 @@ class BTP:
             for el in elements:
                 if el["travée"] and el["travée"]["choix"]:
                     As_princ = el["travée"]["choix"][0]
-                    Ar_min = max(As_princ / 4.0, 0.84)
+                    # Armature de répartition : règle As/4, avec le
+                    # minimum géométrique B.6.4 de la dalle.
+                    Ar_min = max(As_princ / 4.0, 0.001 * 100.0 * el["e"] * 100.0)
                     choix_rep = None
                     for diam in diametres:
                         aire_barre = math.pi * diam ** 2 / 4.0 / 100.0
@@ -3033,7 +3061,7 @@ class BTP:
           • Pré-dimensionnement surfacique : S ≥ Nser / σsol
           • Condition de rigidité : d ≥ (A − a) / 4   (BAEL 91 art. 15.II.2)
           • Hauteur totale minimale : H ≥ 20 cm      (NF DTU 13.1)
-          • Poinçonnement (BAEL 91 A.5.2.4) — check indicatif
+          • Poinçonnement (BAEL 91 A.5.2.4)
           • Non-fragilité : Amin = max(0.23·B·d·ft28/fe ; 0.001·B·H)
             (BAEL 91 A.4.2.1 et B.6.4)
           • Espacement maximal ≤ 25 cm en partie courante (NF DTU 13.1)
@@ -3171,18 +3199,21 @@ class BTP:
             sol_verifie = sigma_verif <= sigma_sol
     
             # =====================================================
-            # 5 - POINÇONNEMENT (BAEL 91 A.5.2.4) — CHECK INDICATIF
+            # 5 - POINÇONNEMENT (BAEL 91 A.5.2.4)
             # =====================================================
             # NOTE : Le DTU 13.12 considère la condition de rigidité
             # d ≥ (A−a)/4 suffisante pour les semelles courantes.
-            # Ce check est donné à titre indicatif pour les cas particuliers.
             #
             # Uc = périmètre du contour au niveau du feuillet moyen :
             # Uc = 2·(a + b + 2·H/2) = 2·(a + b + H)
     
-            Uc = 2.0 * (a + b + H)
-            Nu_lim_poinconnement = 0.045 * Uc * H * Fc28 / gamma_b
-            poinconnement_ok = Nu <= Nu_lim_poinconnement
+            d_poinc = e
+            Uc = 2.0 * ((a + 2.0 * d_poinc) + (b + 2.0 * d_poinc))
+            aire_contour = (a + 2.0 * d_poinc) * (b + 2.0 * d_poinc)
+            q_u_sol = Nu / S
+            Vu_poinc = max(Nu - q_u_sol * aire_contour, 0.0)
+            Nu_lim_poinconnement = 0.045 * Uc * d_poinc * Fc28 / gamma_b
+            poinconnement_ok = Vu_poinc <= Nu_lim_poinconnement
     
             # =====================================================
             # 6 - SECTION DES ARMATURES (MÉTHODE DES BIELLES)
@@ -3438,45 +3469,42 @@ class BTP:
                 print("   → Augmenter A ou revoir la contrainte du sol.")
     
             # -------------------------------------------------
-            # 5 - POINÇONNEMENT (INDICATIF)
+            # 5 - POINÇONNEMENT
             # -------------------------------------------------
     
             print()
             print("=" * 70)
-            print("5 - POINÇONNEMENT (BAEL 91 A.5.2.4) — INDICATIF")
+            print("5 - POINÇONNEMENT (BAEL 91 A.5.2.4)")
             print("=" * 70)
     
             print()
-            print("NOTE : Non exigé par DTU 13.12 pour les semelles courantes.")
-            print("La condition de rigidité d ≥ (A−a)/4 est suffisante.")
-            print("Ce check est donné pour les cas particuliers.")
-            print()
-            print("Périmètre au feuillet moyen :")
-            print("Uc = 2·(a + b + H)")
+            print("Contour de contrôle à la distance d autour du poteau :")
+            print("Uc = 2·[(a + 2d) + (b + 2d)]")
             print(
-                f"Uc = 2·({a:.2f} + {b:.2f} + {H:.3f})"
+                f"Uc = 2·[({a:.2f} + 2×{d_poinc:.3f}) + "
+                f"({b:.2f} + 2×{d_poinc:.3f})]"
                 f" = {Uc:.3f} m"
             )
     
             print()
-            print("Condition : Nu ≤ 0.045 · Uc · H · fc28 / γb")
+            print("Condition : Vu ≤ 0.045 · Uc · d · fc28 / γb")
             print(
-                f"Nu,lim = 0.045 × {Uc:.3f} × {H:.3f} × "
+                f"Vu,lim = 0.045 × {Uc:.3f} × {d_poinc:.3f} × "
                 f"{Fc28:.1f} / {gamma_b:.2f}"
             )
-            print(f"Nu,lim = {Nu_lim_poinconnement:.4f} MN")
+            print(f"Vu,lim = {Nu_lim_poinconnement:.4f} MN")
     
             print()
-            print(f"Nu     = {Nu:.4f} MN")
+            print(f"Vu     = {Vu_poinc:.4f} MN")
     
             if poinconnement_ok:
                 print(
-                    f"✓ {Nu:.4f} ≤ {Nu_lim_poinconnement:.4f}"
-                    " : POINÇONNEMENT OK (indicatif)"
+                    f"✓ {Vu_poinc:.4f} ≤ {Nu_lim_poinconnement:.4f}"
+                    " : POINÇONNEMENT OK"
                 )
             else:
                 print(
-                    f"⚠️ {Nu:.4f} > {Nu_lim_poinconnement:.4f}"
+                    f"⚠️ {Vu_poinc:.4f} > {Nu_lim_poinconnement:.4f}"
                     " : POINÇONNEMENT NON VÉRIFIÉ"
                 )
                 print("   → Augmenter H ou la section du poteau.")
@@ -3650,12 +3678,12 @@ class BTP:
             )
     
             print()
-            print("🛡️ POINÇONNEMENT (indicatif)")
+            print("🛡️ POINÇONNEMENT")
             print(f"   Uc = {Uc:.3f} m")
-            print(f"   Nu,lim = {Nu_lim_poinconnement:.4f} MN")
-            print(f"   Nu = {Nu:.4f} MN")
+            print(f"   Vu,lim = {Nu_lim_poinconnement:.4f} MN")
+            print(f"   Vu = {Vu_poinc:.4f} MN")
             print(
-                "   ✓ Vérifié (indicatif)"
+                "   ✓ Vérifié"
                 if poinconnement_ok
                 else "   ⚠️ NON vérifié"
             )
@@ -6035,7 +6063,7 @@ class BTP:
     
         Méthodes disponibles :
           • Méthode forfaitaire (Annexe E.1 BAEL 91)
-          • Méthode de Caquot (Annexe E.2 BAEL 91)
+          • Cas hors domaine forfaitaire : calcul arrêté pour vérification externe
     
         Vérifications incluses :
           • Flexion ELU : Mtx, Mty, Max
@@ -6212,15 +6240,16 @@ class BTP:
     
             for i in range(1, n):
                 if n == 2:
-                    # Poutre à 2 travées : -0.6 M0 sur l'appui central
-                    M_appuis[i] = -0.6 * M0[i]
+                    # Poutre à 2 travées : référence basée sur les deux
+                    # travées adjacentes.
+                    M_appuis[i] = -0.6 * min(M0[i - 1], M0[i])
                 elif n >= 3:
                     if i == 1 or i == n - 1:
                         # Appui voisin des appuis de rive : -0.5 M0
-                        M_appuis[i] = -0.5 * M0[i]
+                        M_appuis[i] = -0.5 * min(M0[i - 1], M0[i])
                     else:
                         # Appui intermédiaire : -0.4 M0
-                        M_appuis[i] = -0.4 * M0[i]
+                        M_appuis[i] = -0.4 * min(M0[i - 1], M0[i])
     
             # Moments en travée
             M_travees = []
@@ -6281,11 +6310,12 @@ class BTP:
             }
     
         # =====================================================
-        # MÉTHODE DE CAQUOT (Annexe E.2 BAEL 91)
+        # ANCIENNE ROUTINE CAQUOT — conservée uniquement pour compatibilité;
+        # elle n'est pas appelée car elle ne constitue pas un calcul complet.
         # =====================================================
     
         def methode_caquot(spans, G, Q):
-            """Méthode de Caquot BAEL 91 Annexe E.2.
+            """Ancienne approximation non utilisée dans le calcul final.
     
             Applicable lorsque Q > min(2G ; 5 kN/m²).
             Basée sur la méthode des trois moments avec
@@ -6363,7 +6393,7 @@ class BTP:
             self.banner()
             result_panel("🏗️ CALCUL COMPLET DE LA POUTRE", [
                 "Référentiel : BAEL 91 révisé 99 — Annexe E.1 et E.2",
-                "Méthode forfaitaire ou méthode de Caquot",
+                "Méthode forfaitaire BAEL E.1 lorsque ses conditions sont vérifiées",
                 "Dimensionnement automatique des armatures",
                 "Calcul des charges par descente de charges"
             ])
@@ -6509,16 +6539,20 @@ class BTP:
     
             # Vérification de la condition d'application
             alpha_q = Q / (G + Q) if (G + Q) > 0 else 0
-            condition_forfaitaire = (Q <= min(2 * G, 5.0))
+            # La condition BAEL E.1 porte sur les charges surfaciques;
+            # ne pas comparer une charge linéaire à 5 kN/m².
+            condition_forfaitaire = (
+                Q_surfacique <= min(2.0 * G_surfacique, 5.0)
+            )
     
             print("Condition d'application de la méthode forfaitaire :")
-            print(f"Q ≤ min(2G ; 5 kN/m²)")
-            print(f"{Q:.3f} ≤ min({2*G:.3f} ; 5.000)")
-            print(f"{'✓ Condition vérifiée → Méthode forfaitaire' if condition_forfaitaire else '⚠️ Condition non vérifiée → Méthode de Caquot'}")
+            print(f"Qsurf ≤ min(2Gsurf ; 5 kN/m²)")
+            print(f"{Q_surfacique:.3f} ≤ min({2*G_surfacique:.3f} ; 5.000)")
+            print(f"{'✓ Condition vérifiée → Méthode forfaitaire' if condition_forfaitaire else '⚠️ Condition non vérifiée → méthode forfaitaire indisponible'}")
     
             if not condition_forfaitaire:
                 print()
-                print("👉 La méthode de Caquot sera utilisée (Annexe E.2 BAEL 91).")
+                print("👉 Aucun calcul automatique n'est produit pour ce cas hors domaine.")
             else:
                 print()
                 print("👉 La méthode forfaitaire sera utilisée (Annexe E.1 BAEL 91).")
@@ -6530,12 +6564,16 @@ class BTP:
             # =================================================
             section_panel("3", "CALCUL DES SOLLICITATIONS")
     
-            if condition_forfaitaire:
-                resultats = methode_forfaitaire(spans, G, Q)
-                methode_nom = "Méthode forfaitaire (BAEL 91 Annexe E.1)"
-            else:
-                resultats = methode_caquot(spans, G, Q)
-                methode_nom = "Méthode de Caquot (BAEL 91 Annexe E.2)"
+            if not condition_forfaitaire:
+                print()
+                print("❌ La méthode forfaitaire BAEL E.1 n'est pas applicable à ces charges.")
+                print("   Le module Caquot simplifié n'est pas utilisé : il ne constitue pas un calcul BAEL complet.")
+                print("   Réduire/revoir les charges ou faire une analyse exacte de la poutre continue.")
+                self.pause()
+                continue
+
+            resultats = methode_forfaitaire(spans, G, Q)
+            methode_nom = "Méthode forfaitaire (BAEL 91 Annexe E.1)"
     
             print()
             print(f"📌 {methode_nom}")
@@ -6549,7 +6587,7 @@ class BTP:
     
             print("Moments isostatiques de référence :")
             for i, m0 in enumerate(M0, 1):
-                print(f"  Travée {i} : M0 = wu × L{i}² / 8 = {m0:.4f} MN.m")
+                print(f"  Travée {i} : M0 = wu × L{i}² / 8 = {m0:.4f} kN.m")
     
             print()
             print("Moments sur appuis :")
@@ -6559,17 +6597,17 @@ class BTP:
                 elif i == len(M_appuis) - 1:
                     print(f"  Appui {i} (rive) : M = 0")
                 else:
-                    print(f"  Appui {i} : M = {m:.4f} MN.m")
+                    print(f"  Appui {i} : M = {m:.4f} kN.m")
     
             print()
             print("Moments en travée :")
             for i, m in enumerate(M_travees, 1):
-                print(f"  Travée {i} : Mt = {m:.4f} MN.m")
+                print(f"  Travée {i} : Mt = {m:.4f} kN.m")
     
             print()
             print("Efforts tranchants sur appuis :")
             for i, v in enumerate(V_appuis):
-                print(f"  Appui {i} : V = {v:.4f} MN")
+                print(f"  Appui {i} : V = {v:.4f} kN")
     
             self.pause()
     
@@ -6617,21 +6655,14 @@ class BTP:
                     As_comp = 0.0
                     double = False
                 else:
-                    alpha = alpha_lim
-                    z_mm = d_mm * (1.0 - 0.4 * alpha)
-                    Mlim = mu_lim * b_mm * d_mm ** 2 * fbu
-                    As1 = Mlim / (z_mm * sigma_s)
-                    dprime_mm = enrobage_cm * 10.0 + phi_t + phi_l / 2.0
-                    eps_comp = eps_bc * (alpha_lim - dprime_mm / d_mm) / alpha_lim
-                    sig_comp = min(Es * max(eps_comp, 0.0), sigma_s)
-                    if sig_comp <= 0:
-                        return None
-                    As_comp = max(0.0, (Mu_Nmm - Mlim) / ((d_mm - dprime_mm) * sig_comp))
-                    As = As1
-                    double = True
+                    # Le ferraillage comprimé n'est pas dimensionné dans
+                    # cette routine. Refuser le résultat plutôt que fournir
+                    # une section sous-dimensionnée.
+                    return None
     
                 As_cnf = 0.23 * b_mm * d_mm * ft28 / fe
-                As_min = As_cnf
+                As_geo = 0.001 * b_mm * (h_cm * 10.0)
+                As_min = max(As_cnf, As_geo)
                 As_req = max(As, As_min)
     
                 return {
@@ -6695,7 +6726,7 @@ class BTP:
     
                 print()
                 print(f"▶ {zc['name']} — {'APPUI' if zc['kind']=='appui' else 'TRAVÉE'}")
-                print(f"Mu = {zc['Mu']:.4f} MN.m")
+                print(f"Mu = {zc['Mu']:.4f} kN.m")
                 print(f"φl = {r['phi_l']:.0f} mm ; n = {r['n_l']}")
                 print(f"d = {r['d_cm']:.2f} cm")
                 print(f"μ = {r['mu']:.5f}")
@@ -6772,7 +6803,7 @@ class BTP:
                 shear_results.append(ch)
     
                 print(f"▶ {zc['name']}")
-                print(f"Vu = {Vu:.4f} MN")
+                print(f"Vu = {Vu:.4f} kN")
                 print(f"τu = {tau_u:.4f} MPa")
                 check_line("τu ≤ τu,lim", tau_u <= tau_lim, f"{tau_u:.4f} ≤ {tau_lim:.3f}")
                 print(f"✓ {ch['branches']}HA{ch['phi_t']:.0f} / {ch['st_cm']:.1f} cm")
@@ -6788,28 +6819,25 @@ class BTP:
             section_panel("6", "ADHÉRENCE ET LONGUEUR DE SCELLEMENT")
     
             psi_s = 1.5
-            tau_se_lim = psi_s * ft28
+            tau_se_lim = 0.6 * psi_s ** 2 * ft28
     
             print(f"ft28 = {ft28:.3f} MPa")
-            print(f"τse,lim = ψs·ft28 = {tau_se_lim:.3f} MPa")
+            print(f"τsu,lim = 0.6·ψs²·ft28 = {tau_se_lim:.3f} MPa")
             print()
     
             for r in flex_results:
                 zc = r["zone"]
-                Vu = zc["Vu"]
                 d_mm = r["d_mm"]
                 nbar = r["n_l"]
                 phi = r["phi_l"]
                 perimeter = nbar * math.pi * phi
-                tau_se = Vu * 1000.0 / (0.9 * d_mm * perimeter)
                 ls_mm = phi * fe / (4.0 * tau_se_lim)
     
                 print(f"{zc['name']} :")
                 print(f"  Σu = {nbar}×π×{phi:.0f} = {perimeter:.1f} mm")
-                print(f"  τse = {tau_se:.3f} MPa")
-                check_line("Adhérence", tau_se <= tau_se_lim,
-                           f"τse {'≤' if tau_se <= tau_se_lim else '>'} {tau_se_lim:.3f} MPa")
-                print(f"  ls = {ls_mm/10:.1f} cm")
+                print("  Vérification locale de l'adhérence non calculée ici :")
+                print("  l'effort tranchant Vu ne peut pas remplacer l'effort longitudinal de la barre.")
+                print(f"  Longueur de scellement théorique ls = {ls_mm/10:.1f} cm")
                 print()
     
             self.pause()
@@ -6829,7 +6857,7 @@ class BTP:
                 zc = r["zone"]
                 role = "CHAPEAUX SUPÉRIEURS" if zc["kind"] == "appui" else "ARMATURES INFÉRIEURES"
                 print(f"{zc['name']} — {role}")
-                print(f"  Mu = {zc['Mu']:.4f} MN.m")
+                print(f"  Mu = {zc['Mu']:.4f} kN.m")
                 print(f"  {r['n_l']} HA{r['phi_l']:.0f} = {r['As_prov_cm2']:.2f} cm² ; d = {r['d_cm']:.2f} cm")
     
             print()
@@ -6856,9 +6884,9 @@ class BTP:
             print()
             print("Moments :")
             for i, m in enumerate(M_travees, 1):
-                print(f"  Travée {i} : Mt = {m:.4f} MN.m")
+                print(f"  Travée {i} : Mt = {m:.4f} kN.m")
             for i in range(1, nb):
-                print(f"  Appui {i} : Ma = {M_appuis[i]:.4f} MN.m")
+                print(f"  Appui {i} : Ma = {M_appuis[i]:.4f} kN.m")
             print()
             print("Ferraillage :")
             for r in flex_results:
@@ -6870,6 +6898,133 @@ class BTP:
             again = input("\nNouveau calcul de poutre ? (O/N) : ").strip().lower()
             if again not in ("o", "oui"):
                 break
+
+    def bael_complet_batiment(self):
+        """Modules complémentaires BAEL 91 révisé 99 pour bâtiment courant.
+
+        Les modules ci-dessous rendent explicites les hypothèses et refusent
+        les domaines non couverts plutôt que de produire un faux résultat.
+        Les combinaisons d'actions restent à compléter par le CCTP du projet.
+        """
+        def f(msg, minimum=-float("inf")):
+            return self.lire_float(msg, minimum)
+
+        while True:
+            self.clear_screen(); self.banner()
+            print("=" * 70)
+            print("BAEL 91 RÉVISÉ 99 — MODULES COMPLÉMENTAIRES")
+            print("=" * 70)
+            print("1 - Actions et combinaisons BAEL A.3")
+            print("2 - Flexion composée biaxiale A.4.3/A.4.4")
+            print("3 - Torsion et interaction A.5.4")
+            print("4 - Fissuration ELS A.4.5/B.6.3")
+            print("5 - Poutre en T et couture A.4.1/A.5.3")
+            print("6 - Voile courant A.4.3/A.8")
+            print("7 - Semelle excentrée + poinçonnement B.9/A.5.2.4")
+            print("8 - Coutures/reprise de bétonnage A.5.3")
+            print("9 - Détails constructifs A.6/A.7/A.8")
+            print("0 - Retour")
+            c = input("Votre choix : ").strip()
+            if c == "0":
+                return
+            try:
+                if c == "1":
+                    print("\nACTIONS ET COMBINAISONS — vérifier le CCTP et les actions climatiques.")
+                    G=f("G permanente (kN) : "); Q=f("Q variable (kN) : ")
+                    W=f("W vent signé (kN, 0 si absent) : "); T=f("T température/retrait signé (kN, 0 si absent) : ")
+                    combos = {
+                        "ELU fondamental": 1.35*G + 1.50*Q,
+                        "ELU avec vent": 1.35*G + 1.50*Q + 1.50*W,
+                        "ELU vent dominant": 1.35*G + 1.50*W + 1.00*Q,
+                        "ELS rare": G + Q + W + T,
+                        "ELS quasi-permanent": G + 0.50*Q + 0.60*W + T,
+                    }
+                    for k,v in combos.items(): print(f"{k:25s} = {v:.3f} kN")
+                    print("⚠️ Les coefficients ψ et les actions sismiques doivent venir du règlement du projet.")
+                elif c == "2":
+                    b=f("b section (m) : "); h=f("h section (m) : "); fc=f("fc28 (MPa) : ",1)
+                    fe=f("fe (MPa) : ",1); Nd=f("NEd compression (+) (MN) : ")
+                    Mx=f("MEd,x (MN.m) : "); My=f("MEd,y (MN.m) : ")
+                    A=b*h; sx=6*Mx/(b*h*h); sy=6*My/(h*b*b)
+                    corner_stresses = [Nd/A + ex + ey for ex in (sx, -sx) for ey in (sy, -sy)]
+                    sigc=max(corner_stresses); sigt=min(corner_stresses)
+                    fbu=.85*fc/self.gamma_b; sigs=fe/self.gamma_s
+                    print(f"σmax compression = {sigc:.3f} MPa ; σmax traction = {sigt:.3f} MPa")
+                    if sigc > fbu: print("❌ Compression béton dépassée : section/efforts à revoir.")
+                    else: print(f"✓ σc ≤ fbu = {fbu:.3f} MPa")
+                    if sigt < 0:
+                        As=abs(sigt)*A*1e6/sigs
+                        print(f"As indicative côté tendu (coin le plus sollicité) = {As/100:.2f} cm²")
+                    print("Contraintes aux 4 coins (MPa):", ", ".join(f"{x:.3f}" for x in corner_stresses))
+                    print("⚠️ Vérification finale N-Mx-My avec diagramme d'interaction et second ordre à compléter selon la géométrie réelle.")
+                elif c == "3":
+                    b=f("b (m) : "); h=f("h (m) : "); d=f("d utile (m) : "); V=f("VEd (kN) : ")
+                    T=f("TEd (kN.m) : "); fc=f("fc28 (MPa) : ",1); fe=f("fe (MPa) : ",1)
+                    A0=max((b-d)*(h-d),1e-9); u0=2*((b-d)+(h-d)); tauv=V/(b*d*1000); taut=T/(2*A0*(min(b-d,h-d))*1000)
+                    tau=tauv+taut; lim=.20*fc/self.gamma_b
+                    print(f"τV = {tauv:.3f} MPa ; τT = {taut:.3f} MPa ; τtotal = {tau:.3f} MPa")
+                    print(f"τlim conventionnelle = {lim:.3f} MPa")
+                    print("✓" if tau<=lim else "❌", "Vérification béton torsion/cisaillement")
+                    At_s=max(V*1000/(.9*d*fe),0); Al=max(T*1e6/(2*A0*fe),0)
+                    print(f"At/s indicative = {At_s:.4f} cm²/m ; Al torsion indicative = {Al/100:.2f} cm²")
+                    print("⚠️ Interaction complète BAEL A.5.4 à confirmer avec section creuse équivalente et ferraillage réel.")
+                elif c == "4":
+                    b=f("b (mm) : ",1); d=f("d utile (mm) : ",1); As=f("As tendue (mm²) : ",1)
+                    M=f("Mser (kN.m) : ",0); phi=f("diamètre barre (mm) : ",1); s=f("espacement (mm) : ",1)
+                    ft=min(.6+.06*self.Fc28,3.3); z=.9*d; sigs=M*1e6/(max(As*z,1e-9)); rho=As/(b*d)
+                    sr=max(1.3*(1.0/rho)*phi, s); wk=sr*max(sigs/200000.0-ft/200000.0,0)
+                    print(f"ft28 = {ft:.3f} MPa ; σs,ser = {sigs:.3f} MPa ; ρ = {rho:.5f}")
+                    print(f"sr,max estimé = {sr:.1f} mm ; wk estimée = {wk:.3f} mm")
+                    print("⚠️ Limite de fissure à choisir selon A.4.5.3: 0.3/0.4 mm ne sont pas universels.")
+                elif c == "5":
+                    bw=f("bw âme (m) : "); bf=f("bf table (m) : "); hf=f("hf (m) : "); h=f("h total (m) : ")
+                    d=f("d utile (m) : "); Mu=f("MEd (kN.m) : "); fc=f("fc28 (MPa) : ",1); fe=f("fe (MPa) : ",1)
+                    fbu=.85*fc/self.gamma_b; sigs=fe/self.gamma_s
+                    if d<=hf:
+                        bcalc=bf; print("Axe neutre dans la table : section rectangulaire bf.")
+                    else:
+                        bcalc=bw; print("Axe neutre dans l'âme : vérifier compression de la table et couture.")
+                    As=Mu*1e6/(max(.9*d*1000*sigs,1e-9))
+                    print(f"Section de calcul b = {bcalc:.3f} m ; As flexion = {As/100:.2f} cm²")
+                    Vint=abs(Mu)/(max(d,1e-9)); print(f"Effort de glissement indicatif à l'interface = {Vint:.3f} kN/m")
+                    print("⚠️ La couture A.5.3 doit être dimensionnée avec le diagramme réel de cisaillement d'interface.")
+                elif c == "6":
+                    L=f("longueur voile (m) : "); t=f("épaisseur (m) : "); H=f("hauteur (m) : ")
+                    N=f("NEd (MN) : "); M=f("MEd (MN.m) : "); V=f("VEd (MN) : "); fc=f("fc28 (MPa) : ",1); fe=f("fe (MPa) : ",1)
+                    A=L*t; sig=N/A+6*M/(t*L*L); tau=V/(L*t*1000); fbu=.85*fc/self.gamma_b
+                    Asv=max(abs(M)*1e6/(.9*H*1000*(fe/self.gamma_s)),0); Ash=max(.001*L*H*1e6,0)
+                    print(f"σ compression extrême = {sig:.3f} MPa ; τ = {tau:.3f} MPa")
+                    print(f"As vertical indicative = {Asv/100:.2f} cm² ; As horizontal minimum = {Ash/100:.2f} cm²")
+                    print("✓" if sig<=fbu else "❌", "Compression béton du voile")
+                    print("⚠️ Voile sismique, zones frontières et interaction avec diaphragmes nécessitent RPA/étude globale.")
+                elif c == "7":
+                    A=f("A semelle (m) : "); B=f("B semelle (m) : "); a=f("a poteau (m) : "); b=f("b poteau (m) : ")
+                    N=f("Nser (kN) : "); Mx=f("Mx,ser (kN.m) : "); My=f("My,ser (kN.m) : "); qadm=f("σsol adm (kPa) : ",1)
+                    Nu=f("Nu ELU (kN) : "); e=f("épaisseur semelle (m) : ",.05); mu=f("μ glissement : ",0)
+                    q0=N/(A*B); qx=6*Mx/(A*B*B); qy=6*My/(B*A*A); qs=[q0+qx+qy,q0+qx-qy,q0-qx+qy,q0-qx-qy]
+                    print("Pressions aux quatre angles (kPa):", ", ".join(f"{x:.2f}" for x in qs))
+                    print("✓" if min(qs)>=0 and max(qs)<=qadm else "❌", "Pression du sol / décollement")
+                    ex=abs(My/max(N,1e-9)); ey=abs(Mx/max(N,1e-9)); print(f"ex={ex:.3f} m ; ey={ey:.3f} m ; noyau: A/6={A/6:.3f}, B/6={B/6:.3f}")
+                    Vh=f("H effort horizontal (kN) : "); print(f"FS glissement = {mu*N/max(Vh,1e-9):.3f}")
+                    d=max(e-.08,.05); u=2*((a+2*d)+(b+2*d)); Ain=(a+2*d)*(b+2*d); qu=Nu/(A*B); Vp=max(Nu-qu*Ain,0); cap=.045*u*d*self.Fc28/self.gamma_b*1000
+                    print(f"Poinçonnement: Vu={Vp:.2f} kN ; Vu,lim={cap:.2f} kN")
+                elif c == "8":
+                    V=f("VEd interface (kN) : "); z=f("z (m) : ",.05); fe=f("fe (MPa) : ",1); bw=f("largeur interface (m) : ",.01)
+                    As_m=V*1000/(max(z*1000*fe/self.gamma_s,1e-9)); As_min=.001*bw*1000
+                    print(f"As couture minimale calculée = {max(As_m,As_min)/100:.2f} cm²/m")
+                    print("Prévoir armatures traversant effectivement le plan de reprise et ancrées des deux côtés.")
+                elif c == "9":
+                    cover=f("enrobage nominal (mm) : ",10); phi=f("diamètre principal (mm) : ",1); fe=f("fe (MPa) : ",1); ft=min(.6+.06*self.Fc28,3.3)
+                    tau=.6*1.5**2*ft; ls=phi*fe/(4*tau); rec=max(1.5*ls,40*phi)
+                    print(f"Enrobage = {cover:.1f} mm ; φ = {phi:.1f} mm")
+                    print(f"Longueur scellement théorique ls = {ls:.1f} mm")
+                    print(f"Longueur recouvrement minimale indicative = {rec:.1f} mm")
+                    print("⚠️ Vérifier les minima exacts selon diamètre, position, adhérence, enrobage, congestion et A.6/A.7.")
+                else:
+                    print("Choix invalide.")
+            except (ValueError, ZeroDivisionError) as exc:
+                print(f"❌ Donnée invalide ou division impossible : {exc}")
+            self.pause()
 
     def menu(self):
 
@@ -6893,6 +7048,7 @@ class BTP:
                 menu_table.add_row(Text("10 - 🌬️ Calcul complet de l'effet du vent", style="bright_cyan"))
                 menu_table.add_row(Text("11 - 🏗️ Calcul complet de la poutre (BAEL 91 rev. 99)", style="bright_yellow"))
                 menu_table.add_row(Text("12 - 📊 Descente de charges", style="bright_cyan"))
+                menu_table.add_row(Text("13 - 📚 BAEL complet bâtiment courant", style="bright_magenta"))
                 menu_table.add_row(Text("0 - 🚪 Quitter", style="bright_red"))
                 print(Panel(
                     menu_table,
@@ -6917,6 +7073,7 @@ class BTP:
                 print("║  10 - 🌬️ Calcul complet de l'effet du vent               ║")
                 print("║  11 - 🏗️ Calcul complet de la poutre (BAEL 91 rev. 99)   ║")
                 print("║  12 - 📊 Descente de charges                          ║")
+                print("║  13 - 📚 BAEL complet bâtiment courant               ║")
                 print("║   0 - 🚪 Quitter                                           ║")
                 print("╚════════════════════════════════════════════════════════════╝")
             print()
@@ -6970,6 +7127,9 @@ class BTP:
             elif choix == "12":
                 self.descente_charge()
 
+            elif choix == "13":
+                self.bael_complet_batiment()
+
             elif choix == "0":
 
                 self.clear_screen()
@@ -6989,7 +7149,7 @@ class BTP:
                 print("❌ CHOIX INVALIDE !")
                 print()
                 print(
-                    "Veuillez choisir : 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11 ou 0."
+                    "Veuillez choisir : 1 à 13 ou 0."
                 )
 
                 self.pause()
@@ -7112,6 +7272,7 @@ class BTPtk:
             ("🌬️", "Calcul complet de l'effet du vent", lambda: self.open_option(10)),
             ("🏗️", "Calcul complet de la poutre", lambda: self.open_option(11)),
             ("📊", "Descente de charges", lambda: self.open_option(12)),
+            ("📚", "BAEL complet bâtiment courant", lambda: self.open_option(13)),
         ]
         for i, (icon, label, cmd) in enumerate(items):
             r, c = divmod(i, 3)
@@ -7613,6 +7774,11 @@ class BTPtk:
                          bg=self.GREEN, fg=self.BG, activebackground="#94e2d5",
                          relief=tk.FLAT, cursor="hand2", command=self.run_current)
         calc.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0,4), ipady=4)
+        export = tk.Button(bf, text="📄 Exporter PDF", font=("Segoe UI",10,"bold"),
+                           bg=self.ACCENT, fg=self.BG,
+                           activebackground="#b4d8ff", relief=tk.FLAT,
+                           cursor="hand2", command=self.export_current_pdf)
+        export.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4, ipady=4)
         reset = tk.Button(bf, text="🔄 Reset", font=("Segoe UI",10),
                           bg=self.BTN_HOVER, fg=self.FG, relief=tk.FLAT,
                           cursor="hand2", command=lambda: self.show_calc(option,title,groups,schema))
@@ -7659,6 +7825,60 @@ class BTPtk:
             # Les entrées texte restent libres; la validation numérique stricte
             # est faite par le moteur BTP original.
 
+    def export_current_pdf(self):
+        """Exporte le rapport détaillé affiché dans le panneau de résultat."""
+        if self.active_output is None:
+            messagebox.showwarning("Export PDF", "Aucun résultat à exporter.")
+            return
+        contenu = self.active_output.get("1.0", tk.END).strip()
+        if not contenu:
+            messagebox.showwarning("Export PDF", "Lancez d'abord le calcul.")
+            return
+
+        safe_title = "".join(ch if ch.isalnum() or ch in " _-" else "_"
+                             for ch in (self.current_title or "calcul_BAEL"))
+        safe_title = safe_title.strip().replace(" ", "_")[:80] or "calcul_BAEL"
+        chemin = filedialog.asksaveasfilename(
+            title="Enregistrer le calcul détaillé en PDF",
+            defaultextension=".pdf",
+            initialfile=f"{safe_title}_{datetime.now():%Y%m%d_%H%M}.pdf",
+            filetypes=[("Document PDF", "*.pdf"), ("Tous les fichiers", "*.*")],
+        )
+        if not chemin:
+            return
+
+        base, _ = os.path.splitext(chemin)
+        md_path = base + ".md"
+        markdown = (
+            f"# {self.current_title or 'Calcul BTP'}\n\n"
+            f"**Date d'export :** {datetime.now():%d/%m/%Y %H:%M}\n\n"
+            "> Rapport généré depuis le moteur BTP-Lariot. Vérifier les hypothèses, "
+            "les unités et le règlement applicable au projet.\n\n"
+            "```text\n" + contenu.replace("```", "'''" ) + "\n```\n"
+        )
+        try:
+            with open(md_path, "w", encoding="utf-8") as fh:
+                fh.write(markdown)
+            subprocess.run(
+                ["manus-md-to-pdf", md_path, chemin],
+                check=True, capture_output=True, text=True, timeout=120,
+            )
+            try:
+                os.remove(md_path)
+            except OSError:
+                pass
+            messagebox.showinfo(
+                "Export PDF terminé",
+                f"Le calcul détaillé a été enregistré ici :\n{chemin}",
+            )
+        except FileNotFoundError:
+            messagebox.showerror(
+                "Export PDF",
+                "L'outil manus-md-to-pdf est introuvable dans cet environnement.",
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            messagebox.showerror("Export PDF", f"Échec de l'export :\n{exc}")
+
     def run_current(self):
         if self.running:
             return
@@ -7676,6 +7896,7 @@ class BTPtk:
                 4:self.bot.poteau, 5:self.bot.semelle_isolee, 6:self.bot.dalle_complete,
                 7:self.bot.escalier, 8:self.bot.fosse_septique,
                 10:self.bot.effet_vent, 11:self.bot.poutre_complete,
+                13:self.bot.bael_complet_batiment,
             }
             if self.current_option in methods:
                 methods[self.current_option]()
@@ -7942,6 +8163,16 @@ class BTPtk:
 
         if n == 12:
             return self.show_descente_charge_gui()
+
+        if n == 13:
+            return self.show_calc(
+                13,
+                "BAEL complet — bâtiment courant",
+                [("Modules", [
+                    {"kind": "info", "key": "scope", "label": "Périmètre", "default": "Actions, flexion composée, torsion, fissuration, voile, semelle excentrée, détails"},
+                ])],
+                schema=False,
+            )
 
     # =========================================================
     # 9 - AVANT MÉTRÉ — STYLE BAT.PY / CALCULS BTP.PY
