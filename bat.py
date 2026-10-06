@@ -365,11 +365,27 @@ class BTP:
                 "Largeur de brique l (m) : "
             )
 
+            e_brique = self.lire_float(
+                "Épaisseur de brique e (m) : "
+            )
+
             t = self.lire_float(
                 "Surface totale du mur T (m²) : "
             )
 
+            e_mur = self.lire_float(
+                "Épaisseur du mur E (m) : "
+            )
+
+            if e_mur < e_brique:
+                print()
+                print("❌ L'épaisseur du mur doit être ≥ à l'épaisseur de la brique.")
+                self.pause()
+                continue
+
             s = L * l
+            couches = e_mur / e_brique
+            u = (t / s) * couches
 
             print()
             print("-" * 70)
@@ -387,7 +403,12 @@ class BTP:
                 f" = {s:.4f} m²"
             )
 
-            u = t / s
+            print()
+            print("Épaisseur du mur / Épaisseur de la brique")
+            print(
+                f"{e_mur:.3f} / {e_brique:.3f}"
+                f" = {couches:.2f} couche(s)"
+            )
 
             print()
             print("-" * 70)
@@ -397,13 +418,14 @@ class BTP:
             print()
             print("Formule :")
             print()
-            print("        T")
-            print("N =  ───────")
-            print("        S")
+            print("        T       E")
+            print("N =  ───── × ─────")
+            print("        S       e")
             print()
 
             print(
-                f"N = {t:.2f} / {s:.4f}"
+                f"N = ({t:.2f} / {s:.4f}) × "
+                f"({e_mur:.3f} / {e_brique:.3f})"
                 f" = {u:.2f} U"
             )
 
@@ -425,8 +447,11 @@ class BTP:
             print()
             print(f"Longueur brique : {L:.3f} m")
             print(f"Largeur brique  : {l:.3f} m")
+            print(f"Épaisseur brique: {e_brique:.3f} m")
             print(f"Surface brique  : {s:.4f} m²")
             print(f"Surface totale  : {t:.2f} m²")
+            print(f"Épaisseur mur   : {e_mur:.3f} m")
+            print(f"Nombre de couches: {couches:.2f}")
             print(f"Nombre calculé  : {u:.2f} U")
             print(f"TOTAL À PRÉVOIR : {total} U")
 
@@ -7447,7 +7472,9 @@ class BTPtk:
         if o == 1:
             if "longueur de brique l" in low: return val("L")
             if "largeur de brique l" in low: return val("l")
+            if "épaisseur de brique" in low: return val("e_brique")
             if "surface totale du mur" in low: return val("T")
+            if "épaisseur du mur" in low: return val("e_mur")
             if "voulez-vous calculer le prix" in low: return val("price_yes", "n")
             if "prix d'une unité de brique" in low: return val("pu", "")
 
@@ -7956,7 +7983,9 @@ class BTPtk:
                 ("Dimensions", [
                     entry("L", "Longueur brique L (m)", "0.22"),
                     entry("l", "Largeur brique l (m)", "0.11"),
+                    entry("e_brique", "Épaisseur de brique e (m)", "0.10"),
                     entry("T", "Surface totale du mur T (m²)", "20"),
+                    entry("e_mur", "Épaisseur du mur E (m)", "0.20"),
                 ]),
                 ("Prix (optionnel)", [
                     choice("price_yes", "Calculer le prix ?", "n",
