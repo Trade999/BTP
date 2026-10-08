@@ -476,6 +476,63 @@ class BTP:
     # 2 - CALCUL DALLE & POUTRE
     # =========================================================
 
+    def beton(self):
+
+        recettes = {
+            200: {"sable": 400, "gravillon": 800, "eau": 110, "fc28": "12–16"},
+            300: {"sable": 400, "gravillon": 800, "eau": 160, "fc28": "16–20"},
+            350: {"sable": 450, "gravillon": 850, "eau": 180, "fc28": "20–25"},
+            400: {"sable": 450, "gravillon": 850, "eau": 210, "fc28": "25–30"},
+        }
+
+        while True:
+            self.clear_screen()
+            self.banner()
+            print("=" * 70)
+            print(" " * 20 + "CALCUL DE DOSAGE DU BÉTON")
+            print("=" * 70)
+            print()
+
+            volume = self.lire_float("Volume de béton V (m³) : ")
+            dosage = self.lire_float("Dosage ciment (kg/m³) [200/300/350/400] : ")
+            dosage = int(dosage)
+
+            if dosage not in recettes:
+                print("❌ Dosage invalide. Choisissez 200, 300, 350 ou 400 kg/m³.")
+                self.pause()
+                continue
+
+            recette = recettes[dosage]
+            ciment_kg = volume * dosage
+            ciment_sacs = math.ceil(ciment_kg / 50)
+            sable_l = volume * recette["sable"]
+            gravillon_l = volume * recette["gravillon"]
+            eau_l = volume * recette["eau"]
+
+            print()
+            print("-" * 70)
+            print("📐 CALCUL DE DOSAGE DU BÉTON")
+            print("-" * 70)
+            print()
+            print(f"Volume de béton       : {volume:.2f} m³")
+            print(f"Dosage de ciment      : {dosage} kg/m³")
+            print(f"Ciment                : {ciment_sacs} sacs de 50 kg = {ciment_kg:.0f} kg")
+            print(f"Sable                 : {sable_l:.0f} L = {sable_l / 1000:.3f} m³")
+            print(f"Gravillon             : {gravillon_l:.0f} L = {gravillon_l / 1000:.3f} m³")
+            print(f"Eau                   : {eau_l:.0f} L")
+            print(f"Résistance fc28       : {recette['fc28']} MPa (indicative)")
+            print()
+            print("Source: Tableau ESPA — Dosage du béton, pour 1 m³ de béton.")
+            self.pause()
+
+            refaire = input("\nNouveau calcul de béton ? (O/N) : ").strip().lower()
+            if refaire not in ["o", "oui"]:
+                break
+
+    # =========================================================
+    # 3 - CALCUL DALLE & POUTRE
+    # =========================================================
+
     def dalle_and_poutre(self):
 
         while True:
@@ -7074,6 +7131,7 @@ class BTP:
                 menu_table.add_row(Text("11 - 🏗️ Calcul complet de la poutre (BAEL 91 rev. 99)", style="bright_yellow"))
                 menu_table.add_row(Text("12 - 📊 Descente de charges", style="bright_cyan"))
                 menu_table.add_row(Text("13 - 📚 BAEL complet bâtiment courant", style="bright_magenta"))
+                menu_table.add_row(Text("14 - 🧱 Calcul de dosage du béton", style="bright_green"))
                 menu_table.add_row(Text("0 - 🚪 Quitter", style="bright_red"))
                 print(Panel(
                     menu_table,
@@ -7099,6 +7157,7 @@ class BTP:
                 print("║  11 - 🏗️ Calcul complet de la poutre (BAEL 91 rev. 99)   ║")
                 print("║  12 - 📊 Descente de charges                          ║")
                 print("║  13 - 📚 BAEL complet bâtiment courant               ║")
+                print("║  14 - 🧱 Calcul de dosage du béton                  ║")
                 print("║   0 - 🚪 Quitter                                           ║")
                 print("╚════════════════════════════════════════════════════════════╝")
             print()
@@ -7155,6 +7214,9 @@ class BTP:
             elif choix == "13":
                 self.bael_complet_batiment()
 
+            elif choix == "14":
+                self.beton()
+
             elif choix == "0":
 
                 self.clear_screen()
@@ -7174,7 +7236,7 @@ class BTP:
                 print("❌ CHOIX INVALIDE !")
                 print()
                 print(
-                    "Veuillez choisir : 1 à 13 ou 0."
+                    "Veuillez choisir : 1 à 14 ou 0."
                 )
 
                 self.pause()
@@ -7265,6 +7327,8 @@ class BTPtk:
                   activebackground=self.ACCENT, activeforeground=self.BG,
                   relief=tk.FLAT, padx=14, pady=6, cursor="hand2",
                   command=on_back or self.show_menu).pack(side=tk.LEFT, padx=10, pady=10)
+        tk.Label(bar, text="🏠", font=("Segoe UI Emoji", 18),
+                 fg=self.ACCENT, bg=self.BTN).pack(side=tk.LEFT, padx=(8, 2))
         tk.Label(bar, text=title, font=("Segoe UI", 14, "bold"),
                  fg=self.ACCENT, bg=self.BTN).pack(side=tk.LEFT, padx=10)
 
@@ -7282,6 +7346,12 @@ class BTPtk:
                  text="Bâtiment • Travaux Publics — Pré-dimensionnement • Calcul • Quantitatif",
                  font=("Segoe UI", 10), fg=self.FG, bg=self.BG).pack(pady=(0, 18))
 
+        # Bannière visuelle simple, sans fichier image externe.
+        house = tk.Canvas(outer, height=92, bg=self.BG, highlightthickness=0)
+        house.pack(fill=tk.X, pady=(0, 12))
+        house.bind("<Configure>", lambda e: self._draw_house(house))
+        self._draw_house(house)
+
         grid = tk.Frame(outer, bg=self.BG)
         grid.pack(fill=tk.BOTH, expand=True)
         items = [
@@ -7298,6 +7368,7 @@ class BTPtk:
             ("🏗️", "Calcul complet de la poutre", lambda: self.open_option(11)),
             ("📊", "Descente de charges", lambda: self.open_option(12)),
             ("📚", "BAEL complet bâtiment courant", lambda: self.open_option(13)),
+            ("🧱", "Calcul de dosage du béton", lambda: self.open_option(14)),
         ]
         for i, (icon, label, cmd) in enumerate(items):
             r, c = divmod(i, 3)
@@ -7308,9 +7379,10 @@ class BTPtk:
                           cursor="hand2", command=cmd)
             b.grid(row=r, column=c, sticky="nsew", padx=6, pady=6)
             self._hover(b, self.BTN, self.BTN_HOVER)
+
         for c in range(3):
             grid.grid_columnconfigure(c, weight=1)
-        for r in range(4):
+        for r in range(5):
             grid.grid_rowconfigure(r, weight=1)
 
         qb = tk.Button(outer, text="🚪  Quitter", font=("Segoe UI", 12, "bold"),
@@ -7319,6 +7391,30 @@ class BTPtk:
                        relief=tk.FLAT, padx=20, pady=10, cursor="hand2",
                        command=self.root.destroy)
         qb.pack(fill=tk.X, pady=(16, 0))
+
+    def _draw_house(self, canvas):
+        """Dessine une petite maison vectorielle dans le bandeau principal."""
+        try:
+            canvas.delete("all")
+            w = max(canvas.winfo_width(), 600)
+            cx = w / 2
+            base = 78
+            left = cx - 58
+            right = cx + 58
+            canvas.create_polygon(cx, 12, left - 14, 43, right + 14, 43,
+                                  fill=self.ACCENT, outline=self.ACCENT)
+            canvas.create_rectangle(left, 42, right, base,
+                                    fill=self.BTN, outline=self.ACCENT, width=2)
+            canvas.create_rectangle(cx - 12, 56, cx + 12, base,
+                                    fill=self.BG, outline=self.YELLOW, width=2)
+            canvas.create_rectangle(left + 14, 53, left + 34, 69,
+                                    fill=self.BG2, outline=self.GREEN, width=2)
+            canvas.create_rectangle(right - 34, 53, right - 14, 69,
+                                    fill=self.BG2, outline=self.GREEN, width=2)
+            canvas.create_text(cx, 88, text="BTP-Lariot • Construction • Calcul",
+                               fill=self.FG, font=("Segoe UI", 9, "bold"))
+        except tk.TclError:
+            pass
 
     def _hover(self, button, normal, hover):
         button.bind("<Enter>", lambda e: button.configure(bg=hover))
@@ -7477,6 +7573,11 @@ class BTPtk:
             if "épaisseur du mur" in low: return val("e_mur")
             if "voulez-vous calculer le prix" in low: return val("price_yes", "n")
             if "prix d'une unité de brique" in low: return val("pu", "")
+
+        # Option 14 — béton dosé selon le tableau ESPA
+        if o == 14:
+            if "volume de béton" in low: return val("V")
+            if "dosage ciment" in low: return val("dosage")
 
         # Option 2 — dalle & poutre
         if o == 2:
@@ -7813,10 +7914,23 @@ class BTPtk:
 
         right = tk.Frame(main, bg=self.BG)
         right.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        result = tk.Text(right, wrap=tk.WORD, font=("Consolas",10),
+
+        result_box = tk.LabelFrame(
+            right, text=" 📊 Résultat détaillé ",
+            font=("Segoe UI", 11, "bold"), fg=self.ACCENT,
+            bg=self.BG2, bd=1, relief=tk.GROOVE, labelanchor="nw"
+        )
+        result_box.pack(fill=tk.BOTH, expand=True)
+        result_hint = tk.Label(
+            result_box,
+            text="Données saisies • Formules • Quantités calculées • Vérifications",
+            font=("Segoe UI", 9), fg=self.MUTED, bg=self.BG2, anchor="w"
+        )
+        result_hint.pack(fill=tk.X, padx=12, pady=(8, 0))
+        result = tk.Text(result_box, wrap=tk.WORD, font=("Consolas",10),
                          bg=self.TEXT_BG, fg=self.FG, insertbackground=self.ACCENT,
-                         relief=tk.FLAT, padx=12, pady=12)
-        result.pack(fill=tk.BOTH, expand=True)
+                         relief=tk.FLAT, padx=14, pady=14, spacing1=2)
+        result.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
         self._bind_text_scroll(result)
         result.tag_configure("normal", foreground=self.FG)
         result.tag_configure("section", foreground=self.ACCENT, font=("Consolas",10,"bold"))
@@ -7923,7 +8037,7 @@ class BTPtk:
                 4:self.bot.poteau, 5:self.bot.semelle_isolee, 6:self.bot.dalle_complete,
                 7:self.bot.escalier, 8:self.bot.fosse_septique,
                 10:self.bot.effet_vent, 11:self.bot.poutre_complete,
-                13:self.bot.bael_complet_batiment,
+                13:self.bot.bael_complet_batiment, 14:self.bot.beton,
             }
             if self.current_option in methods:
                 methods[self.current_option]()
@@ -7992,6 +8106,16 @@ class BTPtk:
                            [("o", "Oui"), ("n", "Non")], refresh_on_change=True),
                     entry("pu", "Prix unitaire / brique (Ar)", "",
                           visible_if=lambda: self._choice_code("price_yes") == "o"),
+                ])
+            ])
+
+        if n == 14:
+                return self.show_calc(14, "Calcul de dosage du béton", [
+                ("Données du béton", [
+                    entry("V", "Volume de béton V (m³)", "1.00"),
+                    choice("dosage", "Dosage ciment (kg/m³)", "350",
+                           [("200", "200 kg/m³"), ("300", "300 kg/m³"),
+                            ("350", "350 kg/m³"), ("400", "400 kg/m³")]),
                 ])
             ])
 
