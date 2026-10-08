@@ -224,6 +224,21 @@ class BTP:
 
             print("❌ Répondez par Oui ou Non.")
 
+    def lire_prix_optionnel(self, message):
+        """Lit un prix en Ariary; une saisie vide signifie: ne pas calculer."""
+        while True:
+            raw = input(message).strip().replace(" ", "").replace(",", ".")
+            if raw == "":
+                return None
+            try:
+                valeur = float(raw)
+                if valeur < 0:
+                    print("❌ Le prix doit être positif ou nul, ou laissez vide.")
+                    continue
+                return valeur
+            except ValueError:
+                print("❌ Prix invalide. Entrez un nombre en Ariary ou laissez vide.")
+
     # =========================================================
     # FORMATAGE ARIARY
     # =========================================================
@@ -521,6 +536,52 @@ class BTP:
             print(f"Gravillon             : {gravillon_l:.0f} L = {gravillon_l / 1000:.3f} m³")
             print(f"Eau                   : {eau_l:.0f} L")
             print(f"Résistance fc28       : {recette['fc28']} MPa (indicative)")
+
+            # Les prix sont indépendants et optionnels. Une ligne laissée vide
+            # exclut uniquement ce matériau du calcul du coût.
+            print()
+            print("💰 PRIX UNITAIRES (Ar) — laissez vide si vous ne voulez pas calculer")
+            prix_ciment = self.lire_prix_optionnel(
+                "Prix ciment (Ar/sac de 50 kg) [optionnel] : "
+            )
+            prix_sable = self.lire_prix_optionnel(
+                "Prix sable (Ar/m³) [optionnel] : "
+            )
+            prix_gravillon = self.lire_prix_optionnel(
+                "Prix gravillon (Ar/m³) [optionnel] : "
+            )
+            prix_eau = self.lire_prix_optionnel(
+                "Prix eau (Ar/L) [optionnel] : "
+            )
+
+            couts = []
+            if prix_ciment is not None:
+                couts.append(("Ciment", ciment_sacs * prix_ciment,
+                              f"{ciment_sacs} sac(s) × {self.format_ar(prix_ciment)}"))
+            if prix_sable is not None:
+                sable_m3 = sable_l / 1000
+                couts.append(("Sable", sable_m3 * prix_sable,
+                              f"{sable_m3:.3f} m³ × {self.format_ar(prix_sable)}"))
+            if prix_gravillon is not None:
+                gravillon_m3 = gravillon_l / 1000
+                couts.append(("Gravillon", gravillon_m3 * prix_gravillon,
+                              f"{gravillon_m3:.3f} m³ × {self.format_ar(prix_gravillon)}"))
+            if prix_eau is not None:
+                couts.append(("Eau", eau_l * prix_eau,
+                              f"{eau_l:.0f} L × {self.format_ar(prix_eau)}"))
+
+            if couts:
+                print()
+                print("📊 DÉTAIL DU PRIX")
+                total_prix = 0
+                for nom, montant, formule in couts:
+                    total_prix += montant
+                    print(f"{nom:<12}: {formule} = {self.format_ar(montant)}")
+                print(f"💰 PRIX TOTAL DES MATÉRIAUX = {self.format_ar(total_prix)}")
+            else:
+                print()
+                print("✓ Aucun prix renseigné : le prix total n'est pas calculé.")
+
             print()
             print("Source: Tableau ESPA — Dosage du béton, pour 1 m³ de béton.")
             self.pause()
@@ -7578,6 +7639,10 @@ class BTPtk:
         if o == 14:
             if "volume de béton" in low: return val("V")
             if "dosage ciment" in low: return val("dosage")
+            if "prix ciment" in low: return val("price_ciment", "")
+            if "prix sable" in low: return val("price_sable", "")
+            if "prix gravillon" in low: return val("price_gravillon", "")
+            if "prix eau" in low: return val("price_eau", "")
 
         # Option 2 — dalle & poutre
         if o == 2:
@@ -8110,12 +8175,18 @@ class BTPtk:
             ])
 
         if n == 14:
-                return self.show_calc(14, "Calcul de dosage du béton", [
+            return self.show_calc(14, "Calcul de dosage du béton", [
                 ("Données du béton", [
                     entry("V", "Volume de béton V (m³)", "1.00"),
                     choice("dosage", "Dosage ciment (kg/m³)", "350",
                            [("200", "200 kg/m³"), ("300", "300 kg/m³"),
                             ("350", "350 kg/m³"), ("400", "400 kg/m³")]),
+                ]),
+                ("Prix unitaires optionnels — laissez vide si inconnu", [
+                    entry("price_ciment", "Prix ciment (Ar/sac de 50 kg)", ""),
+                    entry("price_sable", "Prix sable (Ar/m³)", ""),
+                    entry("price_gravillon", "Prix gravillon (Ar/m³)", ""),
+                    entry("price_eau", "Prix eau (Ar/L)", ""),
                 ])
             ])
 
