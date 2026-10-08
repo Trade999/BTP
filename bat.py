@@ -196,6 +196,143 @@ class BTP:
             print("+" + "-" * 21 + "+")
             print(f"{n}HA{d:g} → {n} barres HA Ø{d:g} mm")
 
+    # =========================================================
+    # SCHÉMAS TECHNIQUES — COUPES ET DIAGRAMMES
+    # =========================================================
+
+    def schema_detail(self, kind, **data):
+        """Affiche des schémas indicatifs liés aux résultats calculés.
+
+        Les schémas sont volontairement cotés et lisibles dans le rapport texte;
+        ils ne remplacent pas un plan d'exécution visé par un ingénieur.
+        """
+        if kind == "poteau":
+            a=data.get("a", 0); b=data.get("b", a); h=data.get("lo", 0)
+            n=data.get("n", 0); phi=data.get("phi", 0); phit=data.get("phit", 0); st=data.get("st", 0)
+            print()
+            print("╔══════════════════════════════════════════════════════════════════════╗")
+            print("║ SCHÉMA POTEAU — COUPE TRANSVERSALE ET LONGITUDINALE                ║")
+            print("╚══════════════════════════════════════════════════════════════════════╝")
+            print(f" Coupe transversale : {a:.2f} × {b:.2f} m | enrobage 3 cm | {n}HA{phi} | cadres HA{phit}")
+            print("        ↑ b")
+            print("   ┌──────────────────┐")
+            print("   │  ●            ●  │")
+            print("   │                  │")
+            print(" a │  ●            ●  │")
+            print("   └──────────────────┘ →")
+            print("   ● = barres longitudinales ; cadre fermé = étrier")
+            print()
+            print(f" Coupe longitudinale : l₀ = {h:.2f} m | cadres courants HA{phit} / {st:.0f} cm")
+            print("       ┌───────────────────────┐")
+            print("       ││  │  │  │  │  │  │  ││ │  ← cadres")
+            print("       │●───────────────────●│ │  ← barres")
+            print("       │●───────────────────●│ │")
+            print("       └───────────────────────┘")
+            print("       ↑ zone nodale : resserrement des cadres aux extrémités")
+
+        elif kind == "semelle":
+            A=data.get("A",0); B=data.get("B",0); a=data.get("a",0); b=data.get("b",0)
+            H=data.get("H",0); e=data.get("e",0); n=data.get("n",0); phi=data.get("phi",0); st=data.get("st",0)
+            print()
+            print("╔══════════════════════════════════════════════════════════════════════╗")
+            print("║ SCHÉMA SEMELLE ISOLÉE — PLAN ET COUPE LONGITUDINALE                ║")
+            print("╚══════════════════════════════════════════════════════════════════════╝")
+            print(f" Plan : semelle {A:.2f} × {B:.2f} m | poteau {a:.2f} × {b:.2f} m")
+            print("        ┌──────────────────────────┐")
+            print("        │  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─   │  ← quadrillage X")
+            print("        │        ┌──────┐         │")
+            print("        │  ─ ─   │POTEAU│   ─ ─  │  ← quadrillage Y")
+            print("        │        └──────┘         │")
+            print("        └──────────────────────────┘")
+            print("        ↔ A                  ↕ B")
+            print()
+            print(f" Coupe : H = {H:.2f} m | d = {e:.2f} m | {n}HA{phi} / {st:.0f} cm en nappe inférieure")
+            print("              ││ poteau")
+            print("              ││")
+            print("        ┌─────┴┴─────┐")
+            print("        │             │")
+            print("        └─────────────┘  ← semelle")
+            print("        ═══════════════  ← sol porteur")
+            print("        ↑ d / H       ← enrobage inférieur")
+
+        elif kind == "dalle":
+            Lx=data.get("Lx",0); Ly=data.get("Ly",0); h=data.get("h",0)
+            nx=data.get("nx",0); dx=data.get("dx",0); ny=data.get("ny",0); dy=data.get("dy",0)
+            print()
+            print("╔══════════════════════════════════════════════════════════════════════╗")
+            print("║ SCHÉMA DALLE — PLAN DE FERRAILLAGE ET COUPE                         ║")
+            print("╚══════════════════════════════════════════════════════════════════════╝")
+            print(f" Plan : Lx = {Lx:.2f} m ; Ly = {Ly:.2f} m")
+            print("        ┌──────────────────────────┐")
+            print("        │||||||||||||||||||||||||||│  ← sens X : barres principales")
+            print("        │==========================│  ← sens Y : répartition")
+            print("        │||||||||||||||||||||||||||│")
+            print("        └──────────────────────────┘")
+            print("        ←──────── Lx ───────────→")
+            print(f"       X : {nx}HA{dx}/ml    Y : {ny}HA{dy}/ml")
+            print()
+            print(f" Coupe : h = {h*100:.1f} cm | d ≈ {0.9*h*100:.1f} cm")
+            print(" appui │────────────── dalle ──────────────│ appui")
+            print("       └──────────────────────────────────┘")
+            print("       ↑ aciers supérieurs sur appuis")
+            print("       ↓ aciers inférieurs en travée")
+
+        elif kind == "escalier":
+            vols=data.get("vols", [])
+            print()
+            print("╔══════════════════════════════════════════════════════════════════════╗")
+            print("║ SCHÉMA ESCALIER — COUPE LONGITUDINALE ET COUPE TRANSVERSALE         ║")
+            print("╚══════════════════════════════════════════════════════════════════════╝")
+            print(" Coupe longitudinale :")
+            print("        ┌─┐")
+            print("        │ │      ┌─┐")
+            print("    ┌───┘ └──┌───┘ └──┐")
+            print("    │         │       │")
+            print("    └─────────┴───────┘  ← paillasse inclinée")
+            for v in vols:
+                print(f"    Volée {v['num']} : L = {v['L']:.2f} m ; α = {v['alpha']:.0f}° ; e = {v['e_paillasse']*100:.1f} cm ; {v['n_marches']} marches")
+            print()
+            largeur=data.get("largeur",0)
+            print(f" Coupe transversale : largeur = {largeur:.2f} m")
+            print("        ┌──────────────────────┐")
+            print("        │  ●  ●  ●  ●  ●  ●   │  ← armatures principales")
+            print("        └──────────────────────┘")
+            print("        ↑ enrobage ; ↓ armatures de répartition")
+
+        elif kind == "poutre":
+            spans=data.get("spans", []); mt=data.get("mt", []); ma=data.get("ma", []); vu=data.get("vu", [])
+            b=data.get("b",0); h=data.get("h",0)
+            print()
+            print("╔══════════════════════════════════════════════════════════════════════╗")
+            print("║ SCHÉMA POUTRE — COUPES, DIAGRAMME M ET DIAGRAMME V                  ║")
+            print("╚══════════════════════════════════════════════════════════════════════╝")
+            print(f" Coupe transversale : b × h = {b:.0f} × {h:.0f} cm")
+            print("        ┌──────────────┐")
+            print("        │  ●        ●  │  ← aciers supérieurs")
+            print("        │  ▣  étrier   │")
+            print("        │  ●        ●  │  ← aciers inférieurs")
+            print("        └──────────────┘")
+            print()
+            print(" Coupe longitudinale :")
+            print("    ●══════════════════════════════════●  aciers bas en travées")
+            print("    ▲──────────▲──────────▲──────────▲  appuis")
+            print("    ║  étriers resserrés aux appuis   ║")
+            print()
+            def bar(vals, width=34):
+                if not vals: return ""
+                m=max(abs(x) for x in vals) or 1
+                return " ".join(("▲" if x>=0 else "▼") + "" for x in vals) + f"   (échelle max {m:.2f})"
+            print(" DIAGRAMME DES MOMENTS M (kN·m) — valeurs calculées")
+            print(" Appuis : " + "  ".join(f"{x:.2f}" for x in ma))
+            print(" Travées: " + "  ".join(f"+{x:.2f}" for x in mt))
+            print(" Ligne M: " + bar(mt))
+            print()
+            print(" DIAGRAMME DES EFFORTS TRANCHANTS V (kN) — valeurs calculées")
+            print(" V max  : " + "  ".join(f"{x:.2f}" for x in vu))
+            print(" Ligne V: " + ("│╲      ╱│  " * max(1,len(spans))))
+            print(" Légende : ▲ moment positif en travée ; ▼ moment négatif sur appui ;")
+            print("           les valeurs numériques ci-dessus sont les données de calcul.")
+
     def lire_float(self, message, minimum=0):
         while True:
             try:
@@ -2066,6 +2203,7 @@ class BTP:
             print(f"Vérification : {As_fournie_cm2:.3f} ≥ {As_retenue_cm2:.3f} ✓")
     
             self.schema_armatures(nb_barres, diametre_long, f"SCHÉMA BA — POTEAU {type_poteau.upper()}")
+            self.schema_detail("poteau", a=a, b=b, lo=lo, n=nb_barres, phi=diametre_long, phit=diametre_cadre, st=st_pratique)
     
             # -------------------------------------------------
             # ARMATURES TRANSVERSALES
@@ -3190,6 +3328,8 @@ class BTP:
     
             print()
             print("=" * 70)
+            self.schema_detail("escalier", vols=volées, largeur=largeur)
+
             print("✓ CALCUL COMPLET DE L'ESCALIER TERMINÉ")
             print("=" * 70)
     
@@ -3845,6 +3985,7 @@ class BTP:
                 nb_barres, diametre,
                 "SCHÉMA BA — SEMELLE ISOLÉE"
             )
+            self.schema_detail("semelle", A=A, B=B, a=a, b=b, H=H, e=e, n=nb_barres, phi=diametre, st=esp_cm)
     
             print()
             print("⚠️ NOTE")
@@ -7009,6 +7150,8 @@ class BTP:
     
             print()
             print("=" * 70)
+            self.schema_detail("poutre", spans=spans, mt=M_travees, ma=M_appuis, vu=[x.get("Vu", 0) for x in shear_results], b=b_cm, h=h_cm)
+
             print("✓ CALCUL COMPLET DE LA POUTRE TERMINÉ")
             print("=" * 70)
     
@@ -7544,6 +7687,7 @@ class BTPtk:
         self.bot.banner = lambda: None
         self.bot.pause = lambda: None
         self.bot.schema_armatures = self.gui_schema_armatures
+        self.bot.schema_detail = self.gui_schema_detail
 
     def gui_print(self, *objects, sep=" ", end="\n", **kwargs):
         text = sep.join(self._plain(x) for x in objects) + end
@@ -9260,6 +9404,146 @@ class BTPtk:
     # ---------------------------------------------------------
     # Engine schema -> Canvas (sans changer les calculs)
     # ---------------------------------------------------------
+    def gui_schema_detail(self, kind, **data):
+        """Schémas vectoriels détaillés avec matplotlib, intégrés au GUI."""
+        labels = {
+            "poteau": "Poteau — coupe transversale et longitudinale",
+            "semelle": "Semelle isolée — plan et coupe",
+            "dalle": "Dalle — plan de ferraillage et coupe",
+            "escalier": "Escalier — coupe longitudinale et transversale",
+            "poutre": "Poutre — coupes et diagrammes M/V",
+        }
+        title=labels.get(kind,"Schéma technique")
+        try:
+            import matplotlib
+            matplotlib.use("TkAgg")
+            import matplotlib.pyplot as plt
+            from matplotlib.patches import Rectangle, Circle, Polygon, FancyArrowPatch
+            from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+        except Exception:
+            self.gui_print(f"[SCHÉMA VECTORIEL INDISPONIBLE] {title}")
+            self.gui_print("Installez matplotlib pour afficher le dessin détaillé.")
+            return
+
+        parent=self.active_schema.master if self.active_schema is not None else None
+        if parent is None:
+            self.gui_print(f"[SCHÉMA] {title}")
+            return
+        try:
+            self.active_schema.destroy()
+        except Exception:
+            pass
+        fig=plt.Figure(figsize=(9.4,4.5), dpi=110, facecolor="#1e1e2e")
+        fig.subplots_adjust(left=.055,right=.98,bottom=.13,top=.84,wspace=.26,hspace=.32)
+        axes=fig.subplots(1,2)
+        fig.suptitle(title, color="#89dceb", fontsize=12, fontweight="bold")
+        for ax in axes:
+            ax.set_facecolor("#181825")
+            ax.tick_params(colors="#a6adc8", labelsize=8)
+            for spine in ax.spines.values(): spine.set_color("#585b70")
+
+        def dim(ax,x1,y1,x2,y2,text,offset=0.0):
+            ax.annotate("",(x2,y2),(x1,y1),arrowprops=dict(arrowstyle="<->",color="#f9e2af",lw=1.2))
+            ax.text((x1+x2)/2,(y1+y2)/2+offset,text,color="#f9e2af",ha="center",va="center",fontsize=8)
+        def setup(ax,xlim=(0,10),ylim=(0,10),title2=""):
+            ax.set_xlim(*xlim); ax.set_ylim(*ylim); ax.set_aspect("equal", adjustable="box")
+            ax.set_xticks([]); ax.set_yticks([]); ax.set_title(title2,color="#cdd6f4",fontsize=9,pad=7)
+        steel="#f9e2af"; concrete="#6c7086"; red="#f38ba8"; blue="#89b4fa"; green="#a6e3a1"
+
+        if kind=="poteau":
+            a=float(data.get("a",.3)); b=float(data.get("b",a)); lo=float(data.get("lo",3)); n=int(data.get("n",4)); phi=float(data.get("phi",12)); phit=float(data.get("phit",6)); st=float(data.get("st",15))
+            setup(axes[0],(-.15,b+.15),(-.15,a+.15),"COUPE TRANSVERSALE")
+            axes[0].add_patch(Rectangle((0,0),b,a,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            axes[0].add_patch(Rectangle((.03,.03),max(b-.06,0),max(a-.06,0),fill=False,edgecolor="#f5c2e7",lw=1.3))
+            pts=[(.07,.07),(b-.07,.07),(.07,a-.07),(b-.07,a-.07)]
+            if n>4:
+                for i in range(n-4):
+                    pts.append((.07+(b-.14)*(i+1)/(n-3),a-.07 if i%2==0 else .07))
+            for x,y in pts[:n]: axes[0].add_patch(Circle((x,y),min(a,b)*.035,facecolor=steel,edgecolor=red,lw=1))
+            dim(axes[0],0,-.09,b,-.09,f"b = {b:.2f} m",-.04); dim(axes[0],-.09,0,-.09,a,f"a = {a:.2f} m",-.08)
+            axes[0].text(b/2,a*.52,f"{n} HA{phi:g}\nCadre HA{phit:g}",color=green,ha="center",va="center",fontsize=8)
+            setup(axes[1],(-.2,1.2),(-.1,lo+.3),"COUPE LONGITUDINALE")
+            axes[1].add_patch(Rectangle((.15,0),.7,lo,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            for x in (.22,.78): axes[1].plot([x,x],[.08,lo-.08],color=steel,lw=2)
+            for y in [0.25,lo*.15,lo*.85,lo-.25]: axes[1].plot([.15,.85],[y,y],color=red,lw=1.2)
+            dim(axes[1],1.02,0,1.02,lo,f"l₀ = {lo:.2f} m",0)
+            axes[1].text(.5,lo*.08,f"étriers HA{phit:g}\n{st:.0f} cm courant",color=green,ha="center",fontsize=8)
+
+        elif kind=="semelle":
+            A=float(data.get("A",2)); B=float(data.get("B",2)); a=float(data.get("a",.3)); b=float(data.get("b",.3)); H=float(data.get("H",.5)); e=float(data.get("e",.4)); n=int(data.get("n",12)); phi=float(data.get("phi",12)); st=float(data.get("st",20))
+            setup(axes[0],(-.15,A+.15),(-.15,B+.15),"PLAN — QUADRILLAGE INFÉRIEUR")
+            axes[0].add_patch(Rectangle((0,0),A,B,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            axes[0].add_patch(Rectangle(((A-a)/2,(B-b)/2),a,b,facecolor="#313244",edgecolor=red,lw=2))
+            for x in [A*.18,A*.35,A*.52,A*.69,A*.86]: axes[0].plot([x,x],[.05,B-.05],color=steel,lw=.7,alpha=.85)
+            for y in [B*.18,B*.35,B*.52,B*.69,B*.86]: axes[0].plot([.05,A-.05],[y,y],color=blue,lw=.7,alpha=.85)
+            dim(axes[0],0,-.09,A,-.09,f"A = {A:.2f} m",-.04); dim(axes[0],-.09,0,-.09,B,f"B = {B:.2f} m",-.08)
+            axes[0].text(A/2,B/2,f"POTEAU\n{a:.2f}×{b:.2f} m",color=green,ha="center",va="center",fontsize=8)
+            setup(axes[1],(-.2,1.2),(-.1,H+.3),"COUPE LONGITUDINALE")
+            axes[1].add_patch(Rectangle((.12,0),.76,H,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            axes[1].add_patch(Rectangle((.38,H),.24,.35,facecolor="#313244",edgecolor=red,lw=2))
+            for y in [e*.12,e*.3,e*.48]: axes[1].plot([.16,.84],[y,y],color=steel,lw=1.2)
+            dim(axes[1],1.02,0,1.02,H,f"H = {H:.2f} m",0); axes[1].text(.5,e*.18,f"{n}HA{phi:g} / {st:.0f} cm",color=green,ha="center",fontsize=8)
+
+        elif kind=="dalle":
+            Lx=float(data.get("Lx",4)); Ly=float(data.get("Ly",5)); h=float(data.get("h",.15)); nx=int(data.get("nx",8)); dx=float(data.get("dx",10)); ny=int(data.get("ny",8)); dy=float(data.get("dy",8))
+            setup(axes[0],(-.15,Lx+.15),(-.15,Ly+.15),"PLAN — FERRAILLAGE")
+            axes[0].add_patch(Rectangle((0,0),Lx,Ly,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            for x in [Lx*i/12 for i in range(1,12)]: axes[0].plot([x,x],[0,Ly],color=steel,lw=.6)
+            for y in [Ly*i/12 for i in range(1,12)]: axes[0].plot([0,Lx],[y,y],color=blue,lw=.6)
+            dim(axes[0],0,-.09,Lx,-.09,f"Lx = {Lx:.2f} m",-.04); dim(axes[0],-.09,0,-.09,Ly,f"Ly = {Ly:.2f} m",-.08)
+            axes[0].text(Lx/2,Ly*.55,f"X : {nx}HA{dx:g}/ml\nY : {ny}HA{dy:g}/ml",color=green,ha="center",fontsize=8)
+            setup(axes[1],(-.4,1.4),(-.05,.45),"COUPE DE LA DALLE")
+            axes[1].add_patch(Rectangle((0,.16),1,.15,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            axes[1].plot([.05,.95],[.205,.205],color=steel,lw=2); axes[1].plot([.05,.95],[.285,.285],color=red,lw=1.8)
+            dim(axes[1],1.08,.16,1.08,.31,f"h = {h*100:.1f} cm",0)
+            axes[1].text(.5,.08,"↓ aciers inférieurs en travée",color=steel,ha="center",fontsize=8); axes[1].text(.5,.38,"↑ aciers supérieurs sur appuis",color=red,ha="center",fontsize=8)
+
+        elif kind=="escalier":
+            vols=data.get("vols",[]); largeur=float(data.get("largeur",1.2));
+            setup(axes[0],(0,10),(0,5),"COUPE LONGITUDINALE")
+            x=0; y=0
+            for v in vols:
+                L=float(v.get("L",2.5)); alpha=float(v.get("alpha",30)); rise=max(L*math.sin(math.radians(alpha)),.2); run=max(L*math.cos(math.radians(alpha)),.2)
+                steps=max(int(v.get("n_marches",8)),1); stepw=run/steps; steph=rise/steps
+                for k in range(steps):
+                    axes[0].add_patch(Rectangle((x+k*stepw,y+k*steph),stepw,steph,facecolor="#45475a",edgecolor="#cdd6f4",lw=.7))
+                axes[0].plot([x,x+run],[y,y+rise],color=steel,lw=2); x+=run; y+=rise
+                axes[0].plot([x,x+.8],[y,y],color=blue,lw=3); x+=.8
+            axes[0].set_xlim(-.3,max(x+.3,3)); axes[0].set_ylim(-.3,max(y+1,3)); axes[0].set_aspect("equal")
+            axes[0].text(.5,.08,"paillasse inclinée / marches",transform=axes[0].transAxes,color=green,fontsize=8)
+            setup(axes[1],(-.2,largeur+.2),(-.1,.35),"COUPE TRANSVERSALE")
+            axes[1].add_patch(Rectangle((0,.08),largeur,.15,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            for i in range(7): axes[1].add_patch(Circle((largeur*(i+1)/8,.13),.015,facecolor=steel,edgecolor=red))
+            dim(axes[1],0,.01,largeur,.01,f"largeur = {largeur:.2f} m",-.04); axes[1].text(largeur/2,.29,"armatures principales",color=green,ha="center",fontsize=8)
+
+        else:
+            spans=data.get("spans",[]); mt=data.get("mt",[]); ma=data.get("ma",[]); vu=data.get("vu",[]); b=float(data.get("b",22)); h=float(data.get("h",50))
+            setup(axes[0],(-.2,1.2),(-.1,1.2),"COUPE TRANSVERSALE")
+            axes[0].add_patch(Rectangle((.15,.15),.7,.85,facecolor="#45475a",edgecolor="#89dceb",lw=2))
+            for x,y in [(.25,.25),(.75,.25),(.25,.9),(.75,.9)]: axes[0].add_patch(Circle((x,y),.045,facecolor=steel,edgecolor=red))
+            axes[0].add_patch(Rectangle((.2,.2),.6,.75,fill=False,edgecolor=red,lw=1,linestyle="--"))
+            axes[0].text(.5,.05,f"b×h = {b:.0f}×{h:.0f} cm",color=green,ha="center",fontsize=8)
+            x=[0]
+            for L in spans: x.append(x[-1]+float(L))
+            setup(axes[1],(0,max(x[-1],1)),(-1.25,1.25),"DIAGRAMMES M ET V")
+            for xx in x: axes[1].plot([xx,xx],[0,-.18],color=blue,lw=2); axes[1].plot(xx,-.18,marker="^",color=steel)
+            if mt:
+                M=max(max([abs(z) for z in mt] or [1]),max([abs(z) for z in ma] or [1]))
+                xx=[]; yy=[]
+                for i,L in enumerate(spans):
+                    xa=x[i]; xb=x[i+1]; xx += [xa, (xa+xb)/2, xb]; yy += [-(abs(ma[i]) if i<len(ma) else 0)/M, abs(mt[i])/M, -(abs(ma[i+1]) if i+1<len(ma) else 0)/M]
+                axes[1].plot(xx,yy,color="#f5c2e7",lw=2,label="M (échelle relative)")
+                axes[1].fill_between(xx,0,yy,color="#f5c2e7",alpha=.18)
+                axes[1].text(.02,.94,"M : " + " | ".join(f"{z:.1f}" for z in mt),transform=axes[1].transAxes,color="#f5c2e7",fontsize=7)
+            axes[1].axhline(0,color="#a6adc8",lw=.8); axes[1].legend(facecolor="#313244",labelcolor="white",fontsize=7,loc="lower right")
+            axes[1].text(.02,.05,"M négatif aux appuis / M positif en travée",transform=axes[1].transAxes,color=green,fontsize=7)
+
+        fig.canvas.draw_idle()
+        widget=FigureCanvasTkAgg(fig, master=parent)
+        widget.draw(); widget.get_tk_widget().pack(fill="both",expand=True,padx=5,pady=5)
+        self.active_schema=widget.get_tk_widget()
+        self._schema_figure=fig; self._schema_canvas=widget
+
     def gui_schema_armatures(self, nb_barres, diametre, titre="SCHÉMA DES ARMATURES"):
         if self.active_schema is None:
             # Le texte reste dans le resultat si aucun canvas n'est disponible.
