@@ -818,7 +818,43 @@ class BTP:
         surfaciques = {"1": "DALLE", "4": "SEMELLE", "7": "AUVENT", "8": "VOILE"}
         lineaires = {"2": "POTEAU", "3": "POUTRE", "5": "LONGRINE", "6": "CHAÎNAGE"}
         lignes = []
-        if type_ouvrage in surfaciques:
+        if type_ouvrage in ("9", "10"):
+            nom = "ESCALIER SIMPLE" if type_ouvrage == "9" else "ESCALIER AVEC PALIER"
+            largeur = self.lire_float("Largeur de l'escalier (m) : ")
+            phi = self.lire_float("Diamètre des fers principaux (mm) : ")
+            esp_princ = self.lire_float("Espacement fers principaux (cm) : ")
+            phi_rep = self.lire_float("Diamètre fers de répartition (mm) : ")
+            esp_rep = self.lire_float("Espacement fers de répartition (cm) : ")
+            enrob = self.lire_float("Enrobage (cm) : ")
+            longueur_com = self.lire_float("Longueur d'une barre commerciale (m) : ")
+            prix_princ = self.lire_float("Prix d'une barre principale (Ar) : ")
+            prix_rep = self.lire_float("Prix d'une barre de répartition (Ar) : ")
+            longueurs = []
+            if type_ouvrage == "9":
+                L = self.lire_float("Projection horizontale de la volée (m) : ")
+                H = self.lire_float("Hauteur verticale de la volée (m) : ")
+                longueurs.append(("Volée 1", math.hypot(L, H), 1.0))
+            else:
+                for i in (1, 2):
+                    L = self.lire_float(f"Projection horizontale volée {i} (m) : ")
+                    H = self.lire_float(f"Hauteur verticale volée {i} (m) : ")
+                    longueurs.append((f"Volée {i}", math.hypot(L, H), 1.0))
+                lp = self.lire_float("Longueur du palier (m) : ")
+                longueurs.append(("Palier", lp, 0.0))
+            for nom_zone, longueur_zone, _ in longueurs:
+                longueur_utile = max(longueur_zone - 2 * enrob / 100, 0)
+                # Principaux: barres parallèles à la pente/à la longueur du palier.
+                n_princ = math.ceil(max(largeur - 2 * enrob / 100, 0) / (esp_princ / 100)) + 1
+                lt_princ = n_princ * longueur_utile
+                # Répartition: barres transversales, une longueur = largeur.
+                n_rep = math.ceil(longueur_utile / (esp_rep / 100)) + 1
+                lt_rep = n_rep * max(largeur - 2 * enrob / 100, 0)
+                lignes.extend([
+                    (f"{nom_zone} — principaux HA{phi:g}", n_princ, longueur_utile, lt_princ, phi, prix_princ),
+                    (f"{nom_zone} — répartition HA{phi_rep:g}", n_rep, max(largeur - 2 * enrob / 100, 0), lt_rep, phi_rep, prix_rep),
+                ])
+            dimensions = f"largeur = {largeur:.2f} m"
+        elif type_ouvrage in surfaciques:
             nom = surfaciques[type_ouvrage]
             volume = self.lire_float("Volume total de béton (m³) : ")
             Lx = self.lire_float("Longueur Lx (m) : ")
@@ -8066,6 +8102,21 @@ class BTPtk:
             if "prix eau" in low: return val("price_eau", "")
         # Option 15 — quantitatif des armatures
         if o == 15:
+            if "ouvrage (1 dalle" in low: return val("type", "1")
+            if "largeur de l'escalier" in low: return val("largeur", "1.20")
+            if "diamètre des fers principaux" in low: return val("phi_esc", "12")
+            if "espacement fers principaux" in low: return val("esp_princ", "15")
+            if "diamètre fers de répartition" in low: return val("phi_rep", "8")
+            if "espacement fers de répartition" in low: return val("esp_rep", "20")
+            if "projection horizontale de la volée" in low: return val("Lvol1", "3.00")
+            if "hauteur verticale de la volée" in low: return val("Hvol1", "1.80")
+            if "projection horizontale volée 1" in low: return val("Lvol1", "2.50")
+            if "hauteur verticale volée 1" in low: return val("Hvol1", "1.40")
+            if "projection horizontale volée 2" in low: return val("Lvol2", "2.50")
+            if "hauteur verticale volée 2" in low: return val("Hvol2", "1.40")
+            if "longueur du palier" in low: return val("Lpalier", "1.20")
+            if "prix d'une barre principale" in low: return val("prix_princ", "75000")
+            if "prix d'une barre de répartition" in low: return val("prix_rep", "75000")
             if low.startswith("ouvrage (1 dalle"):
                 return val("type", "1")
             if "volume total de béton" in low: return val("volume", "9.00")
@@ -8867,7 +8918,8 @@ class BTPtk:
             lin = lambda: self._choice_code("type") in ("2", "3", "5", "6")
             ouvrage = [("1", "Dalle"), ("2", "Poteau"), ("3", "Poutre"),
                        ("4", "Semelle"), ("5", "Longrine"), ("6", "Chaînage"),
-                       ("7", "Auvent"), ("8", "Voile / mur BA")]
+                       ("7", "Auvent"), ("8", "Voile / mur BA"),
+                       ("9", "Escalier simple"), ("10", "Escalier avec palier")]
             return self.show_calc(15, "Quantitatif des fers par ouvrage", [
                 ("Choix de l'ouvrage", [
                     choice("type", "Type d'ouvrage", "1", ouvrage, refresh_on_change=True),
@@ -8888,12 +8940,26 @@ class BTPtk:
                     entry("esp_cadre", "Espacement cadres / étriers (cm)", "11", visible_if=lin),
                     entry("phi_etr", "Diamètre cadres / étriers (mm)", "6", visible_if=lin),
                 ]),
+                ("Escalier simple / avec palier", [
+                    entry("largeur", "Largeur escalier (m)", "1.20", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("Lvol1", "Projection horizontale volée 1 (m)", "2.50", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("Hvol1", "Hauteur verticale volée 1 (m)", "1.40", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("Lvol2", "Projection horizontale volée 2 (m)", "2.50", visible_if=lambda: self._choice_code("type") == "10"),
+                    entry("Hvol2", "Hauteur verticale volée 2 (m)", "1.40", visible_if=lambda: self._choice_code("type") == "10"),
+                    entry("Lpalier", "Longueur palier (m)", "1.20", visible_if=lambda: self._choice_code("type") == "10"),
+                    entry("phi_esc", "Diamètre fers principaux (mm)", "12", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("esp_princ", "Espacement fers principaux (cm)", "15", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("phi_rep", "Diamètre fers répartition (mm)", "8", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("esp_rep", "Espacement fers répartition (cm)", "20", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                ]),
                 ("Longueur commerciale, enrobage et prix", [
                     entry("enrob", "Enrobage (cm)", "3.00"),
                     entry("barre", "Longueur barre commerciale (m)", "11.80"),
                     entry("prix_barre", "Prix barre nappe (Ar)", "75000", visible_if=surf),
                     entry("prix_long", "Prix barre longitudinale (Ar)", "75000", visible_if=lin),
                     entry("prix_etr", "Prix barre cadres (Ar)", "75000", visible_if=lin),
+                    entry("prix_princ", "Prix barre principale escalier (Ar)", "75000", visible_if=lambda: self._choice_code("type") in ("9", "10")),
+                    entry("prix_rep", "Prix barre répartition escalier (Ar)", "75000", visible_if=lambda: self._choice_code("type") in ("9", "10")),
                 ]),
             ])
 
