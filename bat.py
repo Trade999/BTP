@@ -625,7 +625,279 @@ class BTP:
                 break
 
     # =========================================================
-    # 2 - CALCUL DALLE & POUTRE
+    # 2 - CALCUL QUANTITATIF DES FERS
+    # =========================================================
+    def calcul_ferraillage(self):
+        """Quantitatif indicatif des armatures à partir de L, Ø et espacement.
+
+        Ce module ne remplace pas le dimensionnement BAEL : il transforme un
+        ferraillage choisi (ou provenant d'un plan) en nombre de barres,
+        longueurs cumulées et poids théorique.
+        """
+        masse_kg_m = lambda phi: (phi ** 2) / 162.0
+
+        while True:
+            self.clear_screen()
+            self.banner()
+            print("=" * 70)
+            print("        CALCUL DU NOMBRE ET DE LA LONGUEUR DES FERS")
+            print("=" * 70)
+            print()
+            type_ouvrage = str(input(
+                "Type d'ouvrage (1 dalle / 2 poteau / 3 poutre / "
+                "4 chaînage / 5 semelle / 6 longrine) : "
+            )).strip()
+
+            if type_ouvrage == "7":
+                # Cas pratique : le volume vient de l'avant-métré. La
+                # section permet de retrouver la longueur cumulée des poteaux.
+                nom = "POTEAUX — DEPUIS VOLUME BÉTON"
+                volume = self.lire_float("Volume total de béton des poteaux (m³) : ")
+                a = self.lire_float("Côté a du poteau (cm) : ")
+                b = self.lire_float("Côté b du poteau (cm) : ")
+                nlong = int(self.lire_float("Nombre de fers longitudinaux (ex. 4) : "))
+                phi_long = self.lire_float("Diamètre des fers longitudinaux (mm) : ")
+                esp = self.lire_float("Espacement des cadres / étriers (cm) : ")
+                phi_etr = self.lire_float("Diamètre des cadres / étriers (mm) : ")
+                enrob = self.lire_float("Enrobage (cm) : ")
+                longueur_barre = self.lire_float("Longueur d'une barre commerciale (m) : ")
+                prix_long = self.lire_float("Prix d'une barre longitudinale (Ar) : ")
+                prix_etr = self.lire_float("Prix d'une barre pour étriers (Ar) : ")
+                section_m2 = (a / 100) * (b / 100)
+                longueur_poteaux = volume / section_m2
+                n_etr = math.ceil(max(longueur_poteaux * 100 - 2 * enrob, 0) / esp) + 1
+                l_long_total = nlong * longueur_poteaux
+                l_etr_unitaire = max(2 * ((a - 2 * enrob) + (b - 2 * enrob)) / 100 + 0.20, 0)
+                l_etr_total = n_etr * l_etr_unitaire
+                nb_barres_long = math.ceil(l_long_total / longueur_barre)
+                nb_barres_etr = math.ceil(l_etr_total / longueur_barre)
+                lignes = [
+                    (f"Longitudinaux — {nlong}HA{phi_long:g}", nlong, longueur_poteaux,
+                     l_long_total, nb_barres_long, prix_long, phi_long),
+                    (f"Cadres — HA{phi_etr:g} / {esp:g} cm", n_etr, l_etr_unitaire,
+                     l_etr_total, nb_barres_etr, prix_etr, phi_etr),
+                ]
+                dimensions = f"V = {volume:.2f} m³ ; section {a:.0f} × {b:.0f} cm"
+                print(f"\nLongueur cumulée des poteaux = V / (a × b)")
+                print(f"= {volume:.3f} / ({a/100:.2f} × {b/100:.2f}) = {longueur_poteaux:.2f} m")
+                print(f"Barre commerciale : {longueur_barre:.2f} m")
+            elif type_ouvrage in ("1", "5"):
+                nom = "DALLE" if type_ouvrage == "1" else "SEMELLE"
+                Lx = self.lire_float("Petite longueur Lx (m) : ")
+                Ly = self.lire_float("Grande longueur Ly (m) : ")
+                phi = self.lire_float("Diamètre des fers (mm) : ")
+                esp = self.lire_float("Espacement des fers (cm) : ")
+                enrob = self.lire_float("Enrobage (cm) : ")
+                lx_utile = max(Lx - 2 * enrob / 100, 0)
+                ly_utile = max(Ly - 2 * enrob / 100, 0)
+                nx = math.ceil(ly_utile / (esp / 100)) + 1
+                ny = math.ceil(lx_utile / (esp / 100)) + 1
+                longueur_x = nx * lx_utile
+                longueur_y = ny * ly_utile
+                lignes = [
+                    (f"Sens X — {nx}HA{phi:g}", nx, lx_utile, longueur_x),
+                    (f"Sens Y — {ny}HA{phi:g}", ny, ly_utile, longueur_y),
+                ]
+                dimensions = f"{Lx:.2f} × {Ly:.2f} m"
+                print(f"\n{nom} : {dimensions} | Ø{phi:g} / {esp:g} cm")
+            elif type_ouvrage == "3":
+                nom = "POUTRE"
+                L = self.lire_float("Longueur de la poutre L (m) : ")
+                b = self.lire_float("Largeur b (cm) : ")
+                h = self.lire_float("Hauteur h (cm) : ")
+                nlong = int(self.lire_float("Nombre de fers longitudinaux : "))
+                phi_long = self.lire_float("Diamètre des fers longitudinaux (mm) : ")
+                esp = self.lire_float("Espacement des étriers (cm) : ")
+                phi_etr = self.lire_float("Diamètre des étriers (mm) : ")
+                enrob = self.lire_float("Enrobage (cm) : ")
+                n_etr = math.ceil(max(L * 100 - 2 * enrob, 0) / esp) + 1
+                l_long = max(L - 2 * enrob / 100, 0)
+                l_etr = max(2 * ((b - 2 * enrob) + (h - 2 * enrob)) / 100 + 0.20, 0)
+                lignes = [
+                    (f"Longitudinaux — {nlong}HA{phi_long:g}", nlong, l_long, nlong * l_long),
+                    (f"Étriers — HA{phi_etr:g} / {esp:g} cm", n_etr, l_etr, n_etr * l_etr),
+                ]
+                dimensions = f"L = {L:.2f} m ; {b:.0f} × {h:.0f} cm"
+            elif type_ouvrage in ("2", "4", "6"):
+                noms = {"2": "POTEAU", "4": "CHAÎNAGE", "6": "LONGRINE"}
+                nom = noms[type_ouvrage]
+                if type_ouvrage == "2":
+                    a = self.lire_float("Côté a du poteau (cm) : ")
+                    b = self.lire_float("Côté b du poteau (cm) : ")
+                    L = self.lire_float("Hauteur / longueur du poteau (m) : ")
+                else:
+                    L = self.lire_float("Longueur de l'élément L (m) : ")
+                    b = self.lire_float("Largeur b (cm) : ")
+                    a = self.lire_float("Hauteur h (cm) : ")
+                nlong = int(self.lire_float("Nombre de fers longitudinaux : "))
+                phi_long = self.lire_float("Diamètre des fers longitudinaux (mm) : ")
+                esp = self.lire_float("Espacement des cadres / étriers (cm) : ")
+                phi_etr = self.lire_float("Diamètre des cadres / étriers (mm) : ")
+                enrob = self.lire_float("Enrobage (cm) : ")
+                n_etr = math.ceil(max(L * 100 - 2 * enrob, 0) / esp) + 1
+                l_long = max(L - 2 * enrob / 100, 0)
+                l_etr = max(2 * ((a - 2 * enrob) + (b - 2 * enrob)) / 100 + 0.20, 0)
+                lignes = [
+                    (f"Longitudinaux — {nlong}HA{phi_long:g}", nlong, l_long, nlong * l_long),
+                    (f"Cadres / étriers — HA{phi_etr:g} / {esp:g} cm", n_etr, l_etr, n_etr * l_etr),
+                ]
+                dimensions = f"L = {L:.2f} m ; section {b:.0f} × {a:.0f} cm"
+            else:
+                print("❌ Type d'ouvrage invalide. Choisissez de 1 à 6.")
+                self.pause()
+                continue
+
+            print("\nFORMULE : nombre = ⌈ longueur utile / espacement ⌉ + 1")
+            print("-" * 70)
+            print(f"Ouvrage : {nom} | {dimensions}")
+            total_m = 0.0
+            total_kg = 0.0
+            total_prix = 0.0
+            total_barres = 0
+            for ligne in lignes:
+                if len(ligne) == 7:
+                    designation, nombre, longueur_unitaire, longueur_totale, nb_barres, prix_barre, phi_ligne = ligne
+                else:
+                    designation, nombre, longueur_unitaire, longueur_totale = ligne
+                    phi_ligne = phi if type_ouvrage in ("1", "5") else (
+                        phi_long if "Longitudin" in designation else phi_etr)
+                    nb_barres = math.ceil(longueur_totale / longueur_barre) if type_ouvrage not in ("1", "5") and 'longueur_barre' in locals() else 0
+                    prix_barre = 0.0
+                # Le diamètre est récupéré dans la désignation pour garder un
+                # tableau simple; les deux cas sont séparés explicitement.
+                poids = longueur_totale * masse_kg_m(phi_ligne)
+                total_m += longueur_totale
+                total_kg += poids
+                print(f"{designation}")
+                print(f"  Nombre : {nombre} barre(s)")
+                print(f"  Longueur unitaire : {longueur_unitaire:.2f} m")
+                print(f"  Longueur totale : {longueur_totale:.2f} m")
+                print(f"  Poids théorique : {poids:.2f} kg")
+                if type_ouvrage == "7":
+                    prix_ligne = nb_barres * prix_barre
+                    total_barres += nb_barres
+                    total_prix += prix_ligne
+                    print(f"  Barres commerciales : {nb_barres} × {longueur_barre:.2f} m")
+                    print(f"  Prix : {nb_barres} × {prix_barre:,.0f} = {prix_ligne:,.0f} Ar".replace(",", " "))
+            print("-" * 70)
+            print(f"TOTAL LONGUEUR DE FER : {total_m:.2f} m")
+            print(f"TOTAL POIDS DE FER    : {total_kg:.2f} kg")
+            if type_ouvrage == "7":
+                print(f"TOTAL BARRES COMMERCIALES : {total_barres} barre(s) de {longueur_barre:.2f} m")
+                print(f"TOTAL PRIX DES FERS       : {total_prix:,.0f} Ar".replace(",", " "))
+            print()
+            print("⚠️ Résultat quantitatif indicatif : vérifier le diamètre, le nombre,")
+            print("   les ancrages, recouvrements et longueurs commerciales sur le plan BA.")
+            self.pause()
+            refaire = input("Nouveau calcul de fer ? (O/N) : ").strip().lower()
+            if refaire not in ("o", "oui"):
+                break
+
+    def calcul_ferraillage_multi(self):
+        """Quantitatif des aciers adapté à chaque type d'ouvrage.
+
+        Les ouvrages surfaciques utilisent une nappe dans deux sens; les
+        ouvrages linéaires utilisent des barres longitudinales et des cadres.
+        Le volume de béton est converti en longueur cumulée lorsque nécessaire.
+        """
+        def poids(phi, longueur):
+            return longueur * phi ** 2 / 162.0
+        def nb_barres(longueur, longueur_commerciale):
+            return math.ceil(longueur / longueur_commerciale)
+        def prix(nb, prix_unitaire):
+            return nb * prix_unitaire
+
+        self.clear_screen(); self.banner()
+        print("=" * 70)
+        print("       QUANTITATIF DES FERS — PAR TYPE D'OUVRAGE")
+        print("=" * 70)
+        type_ouvrage = str(input(
+            "Ouvrage (1 dalle / 2 poteau / 3 poutre / 4 semelle / "
+            "5 longrine / 6 chaînage / 7 auvent / 8 voile) : "
+        )).strip()
+        surfaciques = {"1": "DALLE", "4": "SEMELLE", "7": "AUVENT", "8": "VOILE"}
+        lineaires = {"2": "POTEAU", "3": "POUTRE", "5": "LONGRINE", "6": "CHAÎNAGE"}
+        lignes = []
+        if type_ouvrage in surfaciques:
+            nom = surfaciques[type_ouvrage]
+            volume = self.lire_float("Volume total de béton (m³) : ")
+            Lx = self.lire_float("Longueur Lx (m) : ")
+            Ly = self.lire_float("Largeur / longueur Ly (m) : ")
+            h = self.lire_float("Épaisseur / hauteur h (cm) : ")
+            phi = self.lire_float("Diamètre des fers (mm) : ")
+            esp = self.lire_float("Espacement des fers (cm) : ")
+            enrob = self.lire_float("Enrobage (cm) : ")
+            longueur_com = self.lire_float("Longueur d'une barre commerciale (m) : ")
+            prix_barre = self.lire_float("Prix d'une barre (Ar) : ")
+            faces = 2 if type_ouvrage == "8" else 1
+            # Le volume sert de contrôle et permet de connaître l'épaisseur
+            # moyenne si elle n'est pas exactement celle saisie.
+            surface_volume = volume / (h / 100)
+            surface_plan = Lx * Ly
+            print(f"\nSurface par volume : {surface_volume:.2f} m²")
+            print(f"Surface par dimensions : {surface_plan:.2f} m²")
+            Lu_x = max(Lx - 2 * enrob / 100, 0)
+            Lu_y = max(Ly - 2 * enrob / 100, 0)
+            nx = math.ceil(Lu_y / (esp / 100)) + 1
+            ny = math.ceil(Lu_x / (esp / 100)) + 1
+            lignes = [
+                (f"Sens X — {nx}HA{phi:g}", nx * faces, Lu_x, nx * Lu_x * faces, phi, prix_barre),
+                (f"Sens Y — {ny}HA{phi:g}", ny * faces, Lu_y, ny * Lu_y * faces, phi, prix_barre),
+            ]
+            dimensions = f"{Lx:.2f} × {Ly:.2f} m ; h = {h:.1f} cm"
+        elif type_ouvrage in lineaires:
+            nom = lineaires[type_ouvrage]
+            volume = self.lire_float("Volume total de béton (m³) : ")
+            b = self.lire_float("Largeur / côté b (cm) : ")
+            h = self.lire_float("Hauteur / côté h (cm) : ")
+            nlong = int(self.lire_float("Nombre de fers longitudinaux (ex. 4) : "))
+            phi_long = self.lire_float("Diamètre des fers longitudinaux (mm) : ")
+            esp = self.lire_float("Espacement des cadres / étriers (cm) : ")
+            phi_etr = self.lire_float("Diamètre des cadres / étriers (mm) : ")
+            enrob = self.lire_float("Enrobage (cm) : ")
+            longueur_com = self.lire_float("Longueur d'une barre commerciale (m) : ")
+            prix_long = self.lire_float("Prix d'une barre longitudinale (Ar) : ")
+            prix_etr = self.lire_float("Prix d'une barre pour cadres (Ar) : ")
+            section = (b / 100) * (h / 100)
+            longueur = volume / section
+            print(f"Donnée section utilisée : {b:.2f} × {h:.2f} cm")
+            n_etr = math.ceil(max(longueur * 100 - 2 * enrob, 0) / esp) + 1
+            l_long = max(longueur - 2 * enrob / 100, 0)
+            l_etr = max(2 * ((b - 2 * enrob) + (h - 2 * enrob)) / 100 + 0.20, 0)
+            lignes = [
+                (f"Longitudinaux — {nlong}HA{phi_long:g}", nlong, l_long, nlong * l_long, phi_long, prix_long),
+                (f"Cadres / étriers — HA{phi_etr:g} / {esp:g} cm", n_etr, l_etr, n_etr * l_etr, phi_etr, prix_etr),
+            ]
+            print(f"\nLongueur cumulée = V / section = {volume:.3f} / {section:.4f} = {longueur:.2f} m")
+            dimensions = f"section {b:.0f} × {h:.0f} cm"
+        else:
+            print("❌ Type d'ouvrage invalide.")
+            return
+
+        total_m = total_kg = total_prix = 0.0
+        total_barres = 0
+        print(f"\n{nom} — {dimensions}")
+        print("-" * 70)
+        for designation, nombre, lu, lt, phi_ligne, prix_u in lignes:
+            nb = nb_barres(lt, longueur_com)
+            cout = prix(nb, prix_u)
+            total_m += lt; total_kg += poids(phi_ligne, lt)
+            total_prix += cout; total_barres += nb
+            print(designation)
+            print(f"  Nombre théorique : {nombre} | Longueur unitaire : {lu:.2f} m")
+            print(f"  Longueur totale : {lt:.2f} m | Poids : {poids(phi_ligne, lt):.2f} kg")
+            print(f"  Barres commerciales : {nb} × {longueur_com:.2f} m")
+            print(f"  Prix : {cout:,.0f} Ar".replace(",", " "))
+        print("-" * 70)
+        print(f"TOTAL LONGUEUR DE FER : {total_m:.2f} m")
+        print(f"TOTAL POIDS DE FER    : {total_kg:.2f} kg")
+        print(f"TOTAL BARRES          : {total_barres} barre(s) de {longueur_com:.2f} m")
+        print(f"TOTAL PRIX DES FERS   : {total_prix:,.0f} Ar".replace(",", " "))
+        print("\n⚠️ Quantitatif indicatif : ajouter les recouvrements, ancrages et pertes selon le plan BA.")
+        self.pause()
+
+    # =========================================================
+    # 3 - CALCUL DALLE & POUTRE
     # =========================================================
 
     def beton(self):
@@ -7336,6 +7608,7 @@ class BTP:
                 menu_table.add_row(Text("12 - 📊 Descente de charges", style="bright_cyan"))
                 menu_table.add_row(Text("13 - 📚 BAEL complet bâtiment courant", style="bright_magenta"))
                 menu_table.add_row(Text("14 - 🧱 Calcul de dosage du béton", style="bright_green"))
+                menu_table.add_row(Text("15 - 🔩 Calcul nombre et longueur des fers", style="bright_yellow"))
                 menu_table.add_row(Text("0 - 🚪 Quitter", style="bright_red"))
                 print(Panel(
                     menu_table,
@@ -7362,6 +7635,7 @@ class BTP:
                 print("║  12 - 📊 Descente de charges                          ║")
                 print("║  13 - 📚 BAEL complet bâtiment courant               ║")
                 print("║  14 - 🧱 Calcul de dosage du béton                  ║")
+                print("║  15 - 🔩 Calcul nombre et longueur des fers         ║")
                 print("║   0 - 🚪 Quitter                                           ║")
                 print("╚════════════════════════════════════════════════════════════╝")
             print()
@@ -7420,6 +7694,8 @@ class BTP:
 
             elif choix == "14":
                 self.beton()
+            elif choix == "15":
+                self.calcul_ferraillage()
 
             elif choix == "0":
 
@@ -7440,7 +7716,7 @@ class BTP:
                 print("❌ CHOIX INVALIDE !")
                 print()
                 print(
-                    "Veuillez choisir : 1 à 14 ou 0."
+                    "Veuillez choisir : 1 à 15 ou 0."
                 )
 
                 self.pause()
@@ -7573,6 +7849,7 @@ class BTPtk:
             ("📊", "Descente de charges", lambda: self.open_option(12)),
             ("📚", "BAEL complet bâtiment courant", lambda: self.open_option(13)),
             ("🧱", "Calcul de dosage du béton", lambda: self.open_option(14)),
+            ("🔩", "Calcul nombre et longueur des fers", lambda: self.open_option(15)),
         ]
         for i, (icon, label, cmd) in enumerate(items):
             r, c = divmod(i, 3)
@@ -7787,6 +8064,49 @@ class BTPtk:
             if "prix sable" in low: return val("price_sable", "")
             if "prix gravillon" in low: return val("price_gravillon", "")
             if "prix eau" in low: return val("price_eau", "")
+        # Option 15 — quantitatif des armatures
+        if o == 15:
+            if low.startswith("ouvrage (1 dalle"):
+                return val("type", "1")
+            if "volume total de béton" in low: return val("volume", "9.00")
+            if "longueur lx" in low: return val("Lx", "4.00")
+            if "largeur / longueur ly" in low: return val("Ly", "5.00")
+            if "épaisseur / hauteur h" in low: return val("h_surf", "15")
+            if "diamètre des fers (mm)" in low: return val("phi", "10")
+            if "espacement des fers" in low: return val("esp", "20")
+            if "longueur d'une barre commerciale" in low: return val("barre", "11.80")
+            if "prix d'une barre (ar)" in low: return val("prix_barre", "75000")
+            if "largeur / côté b" in low: return val("b_lin", "20")
+            if "hauteur / côté h" in low: return val("h_lin", "30")
+            if "nombre de fers longitudinaux" in low: return val("nlong", "4")
+            if "diamètre des fers longitudinaux" in low: return val("phi_long", "14")
+            if "espacement des cadres / étriers" in low: return val("esp_cadre", "11")
+            if "diamètre des cadres / étriers" in low: return val("phi_etr", "6")
+            if "prix d'une barre longitudinale" in low: return val("prix_long", "75000")
+            if "prix d'une barre pour cadres" in low: return val("prix_etr", "75000")
+            if "type d'ouvrage" in low: return val("type", "1")
+            if "volume total de béton des poteaux" in low: return val("volume", "9.00")
+            if "longueur d'une barre commerciale" in low: return val("barre", "11.80")
+            if "prix d'une barre longitudinale" in low: return val("prix_long", "75000")
+            if "prix d'une barre pour étriers" in low: return val("prix_etr", "75000")
+            if "petite longueur lx" in low: return val("Lx", "4.00")
+            if "grande longueur ly" in low: return val("Ly", "5.00")
+            if "diamètre des fers (mm)" in low: return val("phi", "10")
+            if "espacement des fers" in low: return val("esp", "20")
+            if "enrobage" in low: return val("enrob", "3")
+            if "longueur de la poutre l" in low: return val("L", "5.00")
+            if "hauteur / longueur du poteau" in low: return val("L", "3.00")
+            if "longueur de l'élément l" in low: return val("L", "5.00")
+            if "côté a du poteau" in low: return val("a", "30")
+            if "côté b du poteau" in low: return val("b", "30")
+            if "largeur b" in low: return val("b", "20")
+            if "hauteur h" in low: return val("a", "30")
+            if "nombre de fers longitudinaux" in low: return val("nlong", "4")
+            if "diamètre des fers longitudinaux" in low: return val("phi_long", "12")
+            if "espacement des cadres" in low or "espacement des étriers" in low:
+                return val("esp_cadre", "20")
+            if "diamètre des cadres" in low or "diamètre des étriers" in low:
+                return val("phi_etr", "6")
 
         # Option 2 — dalle & poutre
         if o == 2:
@@ -8247,6 +8567,7 @@ class BTPtk:
                 7:self.bot.escalier, 8:self.bot.fosse_septique,
                 10:self.bot.effet_vent, 11:self.bot.poutre_complete,
                 13:self.bot.bael_complet_batiment, 14:self.bot.beton,
+                15:self.bot.calcul_ferraillage_multi,
             }
             if self.current_option in methods:
                 methods[self.current_option]()
@@ -8541,6 +8862,40 @@ class BTPtk:
                 ])],
                 schema=False,
             )
+        if n == 15:
+            surf = lambda: self._choice_code("type") in ("1", "4", "7", "8")
+            lin = lambda: self._choice_code("type") in ("2", "3", "5", "6")
+            ouvrage = [("1", "Dalle"), ("2", "Poteau"), ("3", "Poutre"),
+                       ("4", "Semelle"), ("5", "Longrine"), ("6", "Chaînage"),
+                       ("7", "Auvent"), ("8", "Voile / mur BA")]
+            return self.show_calc(15, "Quantitatif des fers par ouvrage", [
+                ("Choix de l'ouvrage", [
+                    choice("type", "Type d'ouvrage", "1", ouvrage, refresh_on_change=True),
+                ]),
+                ("Dalle / semelle / auvent / voile", [
+                    entry("volume", "Volume total béton (m³)", "9.00", visible_if=lambda: surf() or lin()),
+                    entry("Lx", "Longueur Lx (m)", "4.00", visible_if=surf),
+                    entry("Ly", "Largeur / longueur Ly (m)", "5.00", visible_if=surf),
+                    entry("h_surf", "Épaisseur / hauteur h (cm)", "15", visible_if=surf),
+                    entry("phi", "Diamètre des fers (mm)", "10", visible_if=surf),
+                    entry("esp", "Espacement des fers (cm)", "20", visible_if=surf),
+                ]),
+                ("Poteau / poutre / longrine / chaînage", [
+                    entry("b_lin", "Largeur / côté b (cm)", "30", visible_if=lin),
+                    entry("h_lin", "Hauteur / côté h (cm)", "30", visible_if=lin),
+                    entry("nlong", "Nombre de fers longitudinaux", "4", visible_if=lin),
+                    entry("phi_long", "Diamètre fers longitudinaux (mm)", "14", visible_if=lin),
+                    entry("esp_cadre", "Espacement cadres / étriers (cm)", "11", visible_if=lin),
+                    entry("phi_etr", "Diamètre cadres / étriers (mm)", "6", visible_if=lin),
+                ]),
+                ("Longueur commerciale, enrobage et prix", [
+                    entry("enrob", "Enrobage (cm)", "3.00"),
+                    entry("barre", "Longueur barre commerciale (m)", "11.80"),
+                    entry("prix_barre", "Prix barre nappe (Ar)", "75000", visible_if=surf),
+                    entry("prix_long", "Prix barre longitudinale (Ar)", "75000", visible_if=lin),
+                    entry("prix_etr", "Prix barre cadres (Ar)", "75000", visible_if=lin),
+                ]),
+            ])
 
     # =========================================================
     # 9 - AVANT MÉTRÉ — STYLE BAT.PY / CALCULS BTP.PY
